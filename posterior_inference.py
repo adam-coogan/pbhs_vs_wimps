@@ -12,7 +12,7 @@ post_f_dir = "../SilverBulletsForWIMPs/results/posteriors_f/"
 ligo_masses = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
 
 
-def load_p_f_gw(m_pbh, n_pbh):
+def load_p_f_gw(m_pbh, n_pbh, post_f_dir=post_f_dir):
     """Loads p(f_PBH | N_PBH) for gravitational wave detectors.
 
     Parameters
@@ -69,6 +69,10 @@ def get_p_gamma_val(m_pbh, m_dm, sv, fs=fs_0, flux_type=flux_type_0, b_cut=b_cut
                 flux_thresh=flux_thresh_0, n_samples=50000):
     """Computes p_gamma(M_pbh, m_dm, <sigma v>), the probability that a PBH
     passes the Fermi point source selection cuts.
+
+    To-do
+    -----
+    Vectorize this over m_dm.
     """
     def _get_p_gamma(sv):
         sim = PBHHaloSim(mass_dist=m_pbh, f_pbh=1, m_dm=m_dm, sv=sv,
@@ -83,6 +87,10 @@ def get_p_gamma_val(m_pbh, m_dm, sv, fs=fs_0, flux_type=flux_type_0, b_cut=b_cut
 
 def load_p_gamma(m_pbh):
     """Loads an interpolator for p_gamma(<sigma v>, M_PBH, m_DM).
+
+    Returns
+    -------
+    A vectorized function mapping (m_DM, <sigma v>) to p_gamma.
     """
     m_dm_col, sv_col, p_gamma_col = np.loadtxt("data/p_gamma_M=%.1f.csv" % m_pbh).T
     m_dms = np.unique(m_dm_col)
@@ -116,9 +124,9 @@ def p_n_gamma(n_gamma, sv, f, p_gamma, m_pbh, m_dm):
     n_gamma : int
     sv : float
     f : float
-    p_gamma : float -> float
+    p_gamma : float, float -> float
         Probability for a PBH to pass the gamma-ray point source cuts, as a
-        function of <sigma v>.
+        function of m_DM and <sigma v>.
     m_pbh : float
     """
     return binom.pmf(n_gamma, n=np.floor(n_mw_pbhs(f, m_pbh)), p=p_gamma(m_dm, sv))
@@ -165,15 +173,15 @@ def posterior_integrand(sv, n_gamma, f, n_pbh, n_u, p_f, p_gamma, m_pbh, m_dm):
     n_u : int
     p_f : float, int -> float
         p(f_PBH | N_PBH)
-    p_gamma : float -> float
-        p_gamma as a function of <sigma v>.
+    p_gamma : float, float -> float
+        p_gamma as a function of m_DM and <sigma v>.
     """
     return p_sv(sv) * p_f(f, n_pbh) * p_n_gamma(n_gamma, sv, f, p_gamma, m_pbh, m_dm) * p_u(n_u, n_gamma)
 
 
 def get_posterior_val(sv, n_pbh, n_u, p_f, p_gamma, m_pbh, m_dm):
     """Computes the posterior for <sigma v>. Supports broadcasting over sv and
-    m_dm.
+    m_dm. See documentation for `posterior_integrand`.
     """
     def get_posterior_val_(sv, m_dm):
         post_val = 0
