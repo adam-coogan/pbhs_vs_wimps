@@ -8,7 +8,9 @@ from scipy.stats import binom, norm, poisson
 from scipy import special
 from pbhhalosim import PBHHaloSim
 
-post_f_dir = "../SilverBulletsForWIMPs/results/posteriors_f/"
+post_f_dir = "data/posteriors_f/"
+post_sv_dir = "data/posteriors_sv/"
+p_gamma_dir = "data/p_gammas/"
 ligo_masses = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
 
 
@@ -27,7 +29,7 @@ def load_p_f_gw(m_pbh, n_pbh, post_f_dir=post_f_dir):
     p_f : float, int -> float
     """
     if m_pbh == 10:  # Einstein telescope
-        f_pbhs, p_f_1, p_f_10, p_f_100 = np.loadtxt(
+        f_pts, p_f_1_pts, p_f_10_pts, p_f_100_pts = np.loadtxt(
             "%sPosterior_f_ET_M=%.1f.txt" % (post_f_dir, m_pbh)).T
     elif m_pbh in ligo_masses:  # LIGO 03
         f_pts, p_f_1_pts, p_f_10_pts, p_f_100_pts = np.loadtxt(
@@ -66,7 +68,7 @@ def p_sv(sv, log_uniform=False):
 
 
 def get_p_gamma_val(m_pbh, m_dm, sv, fs=fs_0, flux_type=flux_type_0, b_cut=b_cut_0,
-                flux_thresh=flux_thresh_0, n_samples=50000):
+                    flux_thresh=flux_thresh_0, n_samples=50000):
     """Computes p_gamma(M_pbh, m_dm, <sigma v>), the probability that a PBH
     passes the Fermi point source selection cuts.
 
@@ -74,7 +76,7 @@ def get_p_gamma_val(m_pbh, m_dm, sv, fs=fs_0, flux_type=flux_type_0, b_cut=b_cut
     -----
     Vectorize this over m_dm.
     """
-    def _get_p_gamma(sv):
+    def _get_p_gamma(m_dm, sv):
         sim = PBHHaloSim(mass_dist=m_pbh, f_pbh=1, m_dm=m_dm, sv=sv,
                          flux_type=flux_type, b_cut=b_cut,
                          flux_thresh=flux_thresh,
@@ -82,7 +84,36 @@ def get_p_gamma_val(m_pbh, m_dm, sv, fs=fs_0, flux_type=flux_type_0, b_cut=b_cut
         sim.run()
         return sim.pr_det
 
-    return np.vectorize(_get_p_gamma)(sv)
+    return np.vectorize(_get_p_gamma)(m_dm, sv)
+
+
+def save_p_gamma_table(m_pbh, m_dms, svs, fs=fs_0, flux_type=flux_type_0, b_cut=b_cut_0,
+                       flux_thresh=flux_thresh_0, n_samples=50000):
+    """Generates a table containing p_gamma.
+
+    Parameters
+    ----------
+    m_pbh : float
+    m_dms : np.array
+        Must contain more than one element.
+    svs : np.array
+        Must contain more than one element.
+    """
+    if m_dms.size <= 1:
+        raise ValueError("m_dms must have more than one element")
+    if svs.size <= 1:
+        raise ValueError("svs must have more than one element")
+    m_dm_col = np.repeat(m_dms, svs.size)
+    sv_col = np.tile(svs, m_dms.size)
+    # Compute the table values
+    p_gamma_vals = get_p_gamma_val(m_pbh, m_dm_col, sv_col, fs=fs_0, flux_type=flux_type_0,
+                                   b_cut=b_cut_0, flux_thresh=flux_thresh_0, n_samples=50000)
+    # Save the data table
+    p_gamma_path = "%sp_gamma_M=%.1f.csv" % (p_gamma_dir, m_pbh)
+    p_gamma_tab = np.stack([m_dm_col, sv_col, p_gamma_vals]).T
+    np.savetxt(p_gamma_path, p_gamma_tab,
+               header=("p_gamma for M_PBH = %.1f M_sun.\n"
+                       "Columns are: m_DM (GeV), <sigma v> (cm^3/s), p_gamma.") % m_pbh)
 
 
 def load_p_gamma(m_pbh):
@@ -92,7 +123,7 @@ def load_p_gamma(m_pbh):
     -------
     A vectorized function mapping (m_DM, <sigma v>) to p_gamma.
     """
-    m_dm_col, sv_col, p_gamma_col = np.loadtxt("data/p_gamma_M=%.1f.csv" % m_pbh).T
+    m_dm_col, sv_col, p_gamma_col = np.loadtxt("%sp_gamma_M=%.1f.csv" % (p_gamma_dir, m_pbh)).T
     m_dms = np.unique(m_dm_col)
     svs = np.unique(sv_col)
     p_gammas = p_gamma_col.reshape([m_dms.size, svs.size])
@@ -112,7 +143,7 @@ def load_p_gamma(m_pbh):
         else:
             return p_gamma_rg(np.array([m_dm, sv]))
 
-    return p_gamma
+    return m_dms, svs, p_gamma
 
 
 def p_n_gamma(n_gamma, sv, f, p_gamma, m_pbh, m_dm):
@@ -132,7 +163,7 @@ def p_n_gamma(n_gamma, sv, f, p_gamma, m_pbh, m_dm):
     return binom.pmf(n_gamma, n=np.floor(n_mw_pbhs(f, m_pbh)), p=p_gamma(m_dm, sv))
 
 
-def p_u(n_u, n_gamma, prior="jeffreys"):
+def p_u(n_gamma, n_u, prior="jeffreys"):
     """p(N_U | N_gamma), the probability of having a point source catalogue of
     size N_U given N_gamma PBHs passing the gamma-ray point source cuts.
 
@@ -160,7 +191,7 @@ def p_u(n_u, n_gamma, prior="jeffreys"):
     return np.vectorize(_p_u)(n_gamma)
 
 
-def posterior_integrand(sv, n_gamma, f, n_pbh, n_u, p_f, p_gamma, m_pbh, m_dm):
+def posterior_integrand(sv, n_gamma, f, n_pbh, p_f, p_gamma, m_pbh, m_dm, n_u=n_u_0):
     """Computes the value of the integrand/summand in the expression for
     p(<sigma v> | N_PBH, N_U, M_PBH, m_DM).
 
@@ -176,26 +207,65 @@ def posterior_integrand(sv, n_gamma, f, n_pbh, n_u, p_f, p_gamma, m_pbh, m_dm):
     p_gamma : float, float -> float
         p_gamma as a function of m_DM and <sigma v>.
     """
-    return p_sv(sv) * p_f(f, n_pbh) * p_n_gamma(n_gamma, sv, f, p_gamma, m_pbh, m_dm) * p_u(n_u, n_gamma)
+    return p_sv(sv) * p_f(f, n_pbh) * p_n_gamma(n_gamma, sv, f, p_gamma, m_pbh, m_dm) * p_u(n_gamma, n_u)
 
 
-def get_posterior_val(sv, n_pbh, n_u, p_f, p_gamma, m_pbh, m_dm):
+def get_posterior_val(sv, n_pbh, p_f, p_gamma, m_pbh, m_dm, n_u=n_u_0):
     """Computes the posterior for <sigma v>. Supports broadcasting over sv and
     m_dm. See documentation for `posterior_integrand`.
     """
-    def get_posterior_val_(sv, m_dm):
+    def get_posterior_val_(m_dm, sv):
         post_val = 0
         for n_gamma in np.arange(0, n_u+1, 1):
             post_val += quad(
-                lambda f: posterior_integrand(sv, n_gamma, f, n_pbh, n_u, p_f, p_gamma, m_pbh, m_dm),
+                lambda f: posterior_integrand(sv, n_gamma, f, n_pbh, p_f, p_gamma, m_pbh, m_dm, n_u),
                 1e-6, 1, epsabs=1e-99)[0]
         return post_val
 
-    return np.vectorize(get_posterior_val_)(sv, m_dm)
+    return np.vectorize(get_posterior_val_)(m_dm, sv)
 
 
-def load_posterior(m_pbh, m_dm, n_pbh):
-    return np.loadtxt("data/posterior_M=%.1f_mdm=%i_N=%i.csv" % (m_pbh, m_dm, n_pbh))
+def save_posterior_table(svs, n_pbh, p_f, p_gamma, m_pbh, m_dms, n_u=n_u_0):
+    """Generates a table containing p_gamma.
+
+    Parameters
+    ----------
+    svs : np.array
+        Must contain more than one element.
+    m_dms : np.array
+        Must contain more than one element.
+    """
+    if svs.size <= 1:
+        raise ValueError("svs must have more than one element")
+    if m_dms.size <= 1:
+        raise ValueError("m_dms must have more than one element")
+    m_dm_col = np.repeat(m_dms, svs.size)
+    sv_col = np.tile(svs, m_dms.size)
+    # Compute the table values
+    post_vals = get_posterior_val(sv_col, n_pbh, p_f, p_gamma, m_pbh, m_dm_col, n_u)
+    # Save the data table
+    post_path = "%sposterior_sv_M=%.1f_N=%i.csv" % (post_sv_dir, m_pbh, n_pbh)
+    post_tab = np.stack([m_dm_col, sv_col, post_vals]).T
+    np.savetxt(post_path, post_tab,
+               header=("p(<sigma v> | N_PBH, M_PBH, m_DM, U) for M_PBH = %.1f M_sun.\n"
+                       "Columns are: m_DM (GeV), <sigma v> (cm^3/s), p(sv | ...).") % m_pbh)
+
+
+def load_posterior(m_pbh, n_pbh):
+    """Loads a table of posterior values for <sigma v>.
+
+    Returns
+    -------
+    m_dms, svs, post_vals
+        post_vals is defined so that:
+            post_vals[i, j] = posterior(m_dms[i], svs[j]).
+    """
+    m_dm_col, sv_col, post_col = np.loadtxt("%sposterior_sv_M=%.1f_N=%i.csv" %
+                                            (post_sv_dir, m_pbh, n_pbh)).T
+    m_dms = np.unique(m_dm_col)
+    svs = np.unique(sv_col)
+    post_vals = post_col.reshape([m_dms.size, svs.size])
+    return m_dms, svs, post_vals
 
 
 def credible_interval(posterior, alpha, x_max, x_guess):

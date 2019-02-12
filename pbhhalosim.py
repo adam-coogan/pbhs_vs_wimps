@@ -9,6 +9,9 @@ from constants import kpc_to_cm, yr_to_s, age_of_universe
 from constants import fs_0, n_u_0, flux_type_0, flux_thresh_0, b_cut_0
 
 class PBHHaloSim(object):
+    """Class for performing Monte Carlo analysis of detectability of PBHs
+    surrounded by DM halos as gamma ray point sources.
+    """
     @classmethod
     def final_states(cl):
         """Returns list of valid DM annihilation final states."""

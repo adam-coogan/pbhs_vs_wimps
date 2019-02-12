@@ -4,6 +4,10 @@ from scipy import integrate
 from scipy import stats
 from scipy.interpolate import interp1d
 
+"""
+Constants and utility functions.
+"""
+
 colors = [c["color"] for c in plt.rcParams["axes.prop_cycle"]]
 
 kpc_to_cm = 3.086e21  # 1 kpc in cm
