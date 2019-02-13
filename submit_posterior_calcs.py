@@ -49,10 +49,10 @@ def parse_args():
     parser.add_argument("-n_samples", default=100000, type=int, help="Number of MC samples to use for p_gamma calculation")
     parser.add_argument("-log10_m_dm_min", default=1, type=float, help="log10 of minimum DM mass in GeV")
     parser.add_argument("-log10_m_dm_max", default=4, type=float, help="log10 of maximum DM mass in GeV")
-    parser.add_argument("-n_m_dm", default=300, type=int, help="Number of DM masses")
+    parser.add_argument("-n_m_dm", default=200, type=int, help="Number of DM masses")
     parser.add_argument("-log10_sv_min", default=-45, type=float, help="log10 of minimum <sigma v> in cm^3/s")
     parser.add_argument("-log10_sv_max", default=-25, type=float, help="log10 of maximum <sigma v> in cm^3/s")
-    parser.add_argument("-n_sv", default=300, type=int, help="Number of <sigma v> values")
+    parser.add_argument("-n_sv", default=200, type=int, help="Number of <sigma v> values")
     parser.add_argument("-v", "--verbose", default=True, type=bool, help="If True, prints progress messages")
     return parser.parse_args()
 
