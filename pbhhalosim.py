@@ -5,7 +5,7 @@ from scipy.special import gammainc
 from constants import gamma_tr_sample
 from constants import r_s_mw, alpha_mw, n_mw_pbhs, d_earth, to_galactic_coords
 from constants import int_dnde_interps, int_e_dnde_interps
-from constants import kpc_to_cm, yr_to_s, age_of_universe
+from constants import kpc_to_cm, yr_to_s, age_of_universe, h_hubble
 from constants import fs_0, n_u_0, flux_type_0, flux_thresh_0, b_cut_0
 
 class PBHHaloSim(object):
@@ -101,7 +101,7 @@ class PBHHaloSim(object):
         UCMH annihilation rate in 1/s.
         """
         rho_max = self.m_dm / (self.sv * age_of_universe * yr_to_s)
-        r_cut = 1.3e-7 * (100./self.m_dm * self.sv/3e-26)**(4/9) * (self.m_pbhs/1.)**(1/3)
+        r_cut = h_hubble * 1.3e-7 * (100./self.m_dm * self.sv/3e-26)**(4/9) * (self.m_pbhs/1.)**(1/3)
         # Added missing factor of 1/2
         self.ann_rates = (4*np.pi*self.sv*rho_max**2 * (kpc_to_cm*r_cut)**3 / (2*self.m_dm**2))
         return self.ann_rates

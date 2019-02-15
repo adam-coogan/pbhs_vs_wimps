@@ -46,6 +46,7 @@ n_u_0 = 19
 flux_type_0 = "dnde"
 flux_thresh_0 = 7e-10  # cm^-2 s^-1
 b_cut_0 = 20  # deg
+h_hubble = 0.7  # H_0 = h 100 km/s / Mpc
 
 def load_int_spec_interps(e_low=1, e_high=None):
     """Loads interpolators for integrated photon spectra for different final states,
