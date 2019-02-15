@@ -51,19 +51,23 @@ def load_p_f_gw(m_pbh, n_pbh, post_f_dir=post_f_dir):
     return p_f
 
 
-def p_sv(sv, log_uniform=False):
+def p_sv(sv, prior="log_uniform"):
     """p(<sigma v>), the prior on <sigma v>.
 
     Parameters
     ----------
-    log_uniform : bool
-        If true, uses a log-uniform prior. Otherwise, uses a flat prior.
+    prior: "log_uniform", "flat"
+        Determines which prior to use.
     """
+    if prior not in ["log_uniform", "flat"]:
+        raise ValueError("Invalid prior on <sigma v>")
+
     def _p_sv(sv):
-        if log_uniform:
+        if prior == "log_uniform":
             return 1 / sv
-        else:
+        elif prior == "flat":
             return 1
+
     return np.vectorize(_p_sv)(sv)
 
 
@@ -166,6 +170,10 @@ def p_n_gamma(n_gamma, sv, f, p_gamma, m_pbh, m_dm):
 def p_u(n_gamma, n_u, prior="jeffreys"):
     """p(N_U | N_gamma), the probability of having a point source catalogue of
     size N_U given N_gamma PBHs passing the gamma-ray point source cuts.
+
+    To-do
+    -----
+    Implement log-flat prior.
 
     Parameters
     ----------
