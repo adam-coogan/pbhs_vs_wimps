@@ -251,7 +251,34 @@ def save_posterior_table(svs, n_pbh, p_f, p_gamma, m_pbh, m_dms, n_u=n_u_0):
                        "Columns are: m_DM (GeV), <sigma v> (cm^3/s), p(sv | ...).") % m_pbh)
 
 
-def load_posterior(m_pbh, n_pbh):
+def save_normalized_posterior_table(m_pbh, n_pbh):
+    """Converts an existing unnormalized posterior table into a normalized
+    posterior table. Does not check if the posterior already exists."""
+    m_dms, svs, unnormd_post_vals = load_posterior(m_pbh, n_pbh)
+    normd_post_vals = unnormd_post_vals.copy()
+
+    for i, m_dm in enumerate(m_dms):
+        # Construct interpolator up to value of <sigma v> where posterior is 0
+        post_zero_idx = np.where(unnormd_post_vals[i] == 0)[0][0] + 1
+        svs_range = svs[:post_zero_idx]
+        unnormd_posterior = interp1d(svs_range, unnormd_post_vals[i, :post_zero_idx],
+                                     bounds_error=None, fill_value="extrapolate")
+        # Normalize posterior
+        norm, norm_err = quad(unnormd_posterior, 0, svs_range[-1], epsabs=1e-200, epsrel=1e-4, limit=200)
+        if norm_err / norm > 1e-3:
+            print("Warning: normalization integral not converging well for m_dm={:e}".format(m_dm))
+        normd_post_vals[i] = unnormd_post_vals[i] / norm
+
+    m_dm_col = np.repeat(m_dms, svs.size)
+    sv_col = np.tile(svs, m_dms.size)
+    normd_post_vals_col = normd_post_vals.flatten()
+    np.savetxt("%snormalized_posterior_sv_M=%.1f_N=%i.csv" % (post_sv_dir, m_pbh, n_pbh),
+               np.stack([m_dm_col, sv_col, normd_post_vals_col]).T,
+               header=("Normalized posterior for <sigma v>.\n"
+                       "Columns: m_DM (GeV), <sigma v> (cm^3/s), posterior."))
+
+
+def load_posterior(m_pbh, n_pbh, normalized=False):
     """Loads a table of posterior values for <sigma v>.
 
     Returns
@@ -260,8 +287,12 @@ def load_posterior(m_pbh, n_pbh):
         post_vals is defined so that:
             post_vals[i, j] = posterior(m_dms[i], svs[j]).
     """
-    m_dm_col, sv_col, post_col = np.loadtxt("%sposterior_sv_M=%.1f_N=%i.csv" %
-                                            (post_sv_dir, m_pbh, n_pbh)).T
+    if normalized:
+        prefix = "normalized_"
+    else:
+        prefix = ""
+    m_dm_col, sv_col, post_col = np.loadtxt("%s%sposterior_sv_M=%.1f_N=%i.csv" %
+                                            (post_sv_dir, prefix, m_pbh, n_pbh)).T
     m_dms = np.unique(m_dm_col)
     svs = np.unique(sv_col)
     post_vals = post_col.reshape([m_dms.size, svs.size])
@@ -270,7 +301,7 @@ def load_posterior(m_pbh, n_pbh):
 
 def credible_interval(posterior, alpha, x_max, x_guess):
     """Computes the credible interval for p(x). At the level alpha, this is
-    x_alpha such that
+    [0, x_alpha], where
         int_0^{x_alpha} dx p(x) = alpha.
 
     Parameters
@@ -288,6 +319,40 @@ def credible_interval(posterior, alpha, x_max, x_guess):
     x_alpha : float
     """
     def objective(x):
-        return quad(posterior, 0, x, epsabs=1e-99, limit=100)[0] - alpha
+        return quad(posterior, 0, x, epsabs=1e-99, epsrel=1e-4, limit=200)[0] - alpha
 
-    return root_scalar(objective, bracket=[0, x_max], x0=x_guess, xtol=1e-99).root
+    return root_scalar(objective, bracket=[0, x_max], x0=x_guess, xtol=1e-200).root
+
+
+def save_sv_bounds(m_pbh, n_pbh, alpha=0.95):
+    """Computes and saves bounds on <sigma v>.
+
+    Returns
+    -------
+    np.array
+        Bounds on <sigma v> at each of the DM masses in the posterior tables
+        for the given PBH mass and number. Saves these bounds to the
+        data/bounds/ directory.
+    """
+    m_dms, svs, post_vals = load_posterior(m_pbh, n_pbh, normalized=True)
+    sv_mg, m_dm_mg = np.meshgrid(svs, m_dms)
+    sv_bounds = []
+
+    for i, m_dm in enumerate(m_dms):
+        # Construct interpolator up to value of <sigma v> where posterior is 0
+        post_zero_idx = np.where(post_vals[i] == 0)[0][0] + 1
+        svs_range = svs[:post_zero_idx]
+
+        posterior = interp1d(svs_range, post_vals[i, :post_zero_idx],
+                             bounds_error=None, fill_value="extrapolate")
+
+        # Compute <sigma v> bound
+        sv_bounds.append(credible_interval(posterior, alpha, x_max=svs_range[-1], x_guess=1e-35))
+
+    sv_bounds = np.array(sv_bounds)
+
+    np.savetxt("data/bounds/sv_bounds_M=%.1f_N=%i.csv" % (m_pbh, n_pbh),
+               np.stack([m_dms, sv_bounds]).T,
+               header="{}% CI bounds on <sigma v>.\nColumns: m_DM (GeV), <sigma v> (cm^3/s).".format(100*alpha))
+
+    return sv_bounds
