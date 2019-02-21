@@ -14,7 +14,7 @@ p_gamma_dir = "data/p_gammas/"
 ligo_masses = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
 
 
-def load_p_f_gw(m_pbh, n_pbh, post_f_dir=post_f_dir):
+def load_p_f_gw(m_pbh, n_pbh, post_f_dir=post_f_dir, prior="log-flat"):
     """Loads p(f_PBH | N_PBH) for gravitational wave detectors.
 
     Parameters
@@ -23,72 +23,85 @@ def load_p_f_gw(m_pbh, n_pbh, post_f_dir=post_f_dir):
         PBH mass
     n_pbh : int
         The number of detections via gravitational waves.
+    prior : "log-flat", "jeffreys"
+        Prior on merger rate. Defaults to the conservative choice, "log-flat".
 
     Returns
     -------
     p_f : float, int -> float
     """
-    if m_pbh == 10:  # Einstein telescope
-        f_pts, p_f_1_pts, p_f_10_pts, p_f_100_pts = np.loadtxt(
-            "%sPosterior_f_ET_M=%.1f.txt" % (post_f_dir, m_pbh)).T
-    elif m_pbh in ligo_masses:  # LIGO 03
-        f_pts, p_f_1_pts, p_f_10_pts, p_f_100_pts = np.loadtxt(
-            "%sPosterior_f_M=%.1f.txt" % (post_f_dir, m_pbh)).T
+    experiment = "ET" if m_pbh == 10 else "O3"
+    if prior == "log-flat":
+        prior = "LF"
+    # elif prior == "jeffreys":
+    #     prior = "J"
     else:
-        raise ValueError("Invalid PBH mass")
+        raise ValueError("Invalid merger rate prior")
 
-    def p_f(f, n_pbh):
-        if n_pbh == 1:
-            p_f_pts = p_f_1_pts
-        elif n_pbh == 10:
-            p_f_pts = p_f_10_pts
-        elif n_pbh == 100:
-            p_f_pts = p_f_100_pts
-        else:
-            raise ValueError("Invalid number of GW detections")
-        return np.interp(f, f_pts, p_f_pts)
+    fs, p_fs = np.loadtxt(
+        "{}Posterior_f_{}_Prior_{}_M={:.1f}_N={}.txt".format(post_f_dir, experiment, prior, m_pbh, n_pbh)).T
 
-    return p_f
+    return interp1d(fs, p_fs)
+    # if m_pbh == 10:  # Einstein telescope
+    #     f_pts, p_f_1_pts, p_f_10_pts, p_f_100_pts = np.loadtxt(
+    #         "{}Posterior_f_ET_M={:.1f}.txt".format(post_f_dir, m_pbh)).T
+    # elif m_pbh in ligo_masses:  # LIGO O3
+    #     f_pts, p_f_1_pts, p_f_10_pts, p_f_100_pts = np.loadtxt(
+    #         "{}Posterior_f_M={:.1f}.txt".format(post_f_dir, m_pbh)).T
+    # else:
+    #     raise ValueError("Invalid PBH mass")
+
+    # def p_f(f, n_pbh):
+    #     if n_pbh == 1:
+    #         p_f_pts = p_f_1_pts
+    #     elif n_pbh == 10:
+    #         p_f_pts = p_f_10_pts
+    #     elif n_pbh == 100:
+    #         p_f_pts = p_f_100_pts
+    #     else:
+    #         raise ValueError("Invalid number of GW detections")
+    #     return np.interp(f, f_pts, p_f_pts)
+
+    # return p_f
 
 
-def p_sv(sv, prior="log_uniform"):
+def p_sv(sv, prior="uniform"):
     """p(<sigma v>), the prior on <sigma v>.
 
     Parameters
     ----------
-    prior: "log_uniform", "flat"
-        Determines which prior to use.
+    prior: "uniform", "log-flat"
+        Determines which prior to use. Defaults to the conservative choice,
+        "uniform".
     """
-    if prior not in ["log_uniform", "flat"]:
+    if prior not in ["uniform", "log-flat"]:
         raise ValueError("Invalid prior on <sigma v>")
 
+    @np.vectorize
     def _p_sv(sv):
-        if prior == "log_uniform":
+        if prior == "log-flat":
             return 1 / sv
-        elif prior == "flat":
+        elif prior == "uniform":
             return 1
 
-    return np.vectorize(_p_sv)(sv)
+    return _p_sv(sv)
 
 
+@np.vectorize
 def get_p_gamma_val(m_pbh, m_dm, sv, fs=fs_0, flux_type=flux_type_0, b_cut=b_cut_0,
                     flux_thresh=flux_thresh_0, n_samples=50000):
-    """Computes p_gamma(M_pbh, m_dm, <sigma v>), the probability that a PBH
+    """Computes p_gamma, the probability that a PBH
     passes the Fermi point source selection cuts.
 
     To-do
     -----
     Vectorize this over m_dm.
     """
-    def _get_p_gamma(m_dm, sv):
-        sim = PBHHaloSim(mass_dist=m_pbh, f_pbh=1, m_dm=m_dm, sv=sv,
-                         flux_type=flux_type, b_cut=b_cut,
-                         flux_thresh=flux_thresh,
-                         n_samples=n_samples)
-        sim.run()
-        return sim.pr_det
-
-    return np.vectorize(_get_p_gamma)(m_dm, sv)
+    sim = PBHHaloSim(mass_dist=m_pbh, f_pbh=1, m_dm=m_dm, sv=sv,
+                     flux_type=flux_type, b_cut=b_cut, flux_thresh=flux_thresh,
+                     n_samples=n_samples)
+    sim.run()
+    return sim.pr_det, sim.pr_det_err
 
 
 def save_p_gamma_table(m_pbh, m_dms, svs, fs=fs_0, flux_type=flux_type_0, b_cut=b_cut_0,
@@ -107,47 +120,65 @@ def save_p_gamma_table(m_pbh, m_dms, svs, fs=fs_0, flux_type=flux_type_0, b_cut=
         raise ValueError("m_dms must have more than one element")
     if svs.size <= 1:
         raise ValueError("svs must have more than one element")
-    m_dm_col = np.repeat(m_dms, svs.size)
-    sv_col = np.tile(svs, m_dms.size)
+    sv_col = np.repeat(svs, m_dms.size)
+    m_dm_col = np.tile(m_dms, svs.size)
     # Compute the table values
-    p_gamma_vals = get_p_gamma_val(m_pbh, m_dm_col, sv_col, fs=fs_0, flux_type=flux_type_0,
-                                   b_cut=b_cut_0, flux_thresh=flux_thresh_0, n_samples=50000)
+    p_gammas, p_gamma_errs = get_p_gamma_val(
+        m_pbh, m_dm_col, sv_col, fs=fs_0, flux_type=flux_type_0, b_cut=b_cut_0,
+        flux_thresh=flux_thresh_0, n_samples=50000)
     # Save the data table
-    p_gamma_path = "%sp_gamma_M=%.1f.csv" % (p_gamma_dir, m_pbh)
-    p_gamma_tab = np.stack([m_dm_col, sv_col, p_gamma_vals]).T
+    p_gamma_path = "{}p_gamma_M={:.1f}.csv".format(p_gamma_dir, m_pbh)
+    p_gamma_tab = np.stack([sv_col, m_dm_col, p_gammas, p_gamma_errs]).T
     np.savetxt(p_gamma_path, p_gamma_tab,
-               header=("p_gamma for M_PBH = %.1f M_sun.\n"
-                       "Columns are: m_DM (GeV), <sigma v> (cm^3/s), p_gamma.") % m_pbh)
+               header=("p_gamma for M_PBH = {:.1f} M_sun.\n"
+                       "Columns are: <sigma v> (cm^3/s), m_DM (GeV), p_gamma, "
+                       "MC error.").format(m_pbh))
+
+
+def rgi_wrapper(rgi):
+    """Wraps a RegularGridInterpolator, since its interface is horrible.
+    """
+    def wrapped_rgi(x, y):
+        x = np.asarray(x)
+        y = np.asarray(y)
+
+        if x.size > 1 and y.size > 1:
+            return rgi(np.array([x, y]).T)
+        elif x.size > 1:
+            return rgi(np.array([x, y*np.ones_like(x)]).T)
+        elif y.size > 1:
+            return rgi(np.array([x*np.ones_like(y), y]).T)
+        else:
+            return rgi(np.array([x, y]))
+
+    return wrapped_rgi
 
 
 def load_p_gamma(m_pbh):
-    """Loads an interpolator for p_gamma(<sigma v>, M_PBH, m_DM).
+    """Loads an interpolator for p_gamma.
 
     Returns
     -------
     A vectorized function mapping (m_DM, <sigma v>) to p_gamma.
     """
-    m_dm_col, sv_col, p_gamma_col = np.loadtxt("%sp_gamma_M=%.1f.csv" % (p_gamma_dir, m_pbh)).T
-    m_dms = np.unique(m_dm_col)
+    sv_col, m_dm_col, p_gamma_col, p_gamma_err_col = np.loadtxt(
+        "{}p_gamma_M={:.1f}.csv".format(p_gamma_dir, m_pbh)).T
     svs = np.unique(sv_col)
-    p_gammas = p_gamma_col.reshape([m_dms.size, svs.size])
-    p_gamma_rg = RegularGridInterpolator((m_dms, svs), p_gammas)
+    m_dms = np.unique(m_dm_col)
+    p_gammas = p_gamma_col.reshape([svs.size, m_dms.size])
+    p_gamma_errs = p_gamma_err_col.reshape([svs.size, m_dms.size])
+    p_gamma_rg = RegularGridInterpolator((svs, m_dms), p_gammas)
+    p_gamma_err_rg = RegularGridInterpolator((svs, m_dms), p_gamma_errs)
 
-    def p_gamma(m_dm, sv):
-        # Wrap the interpolator, since its interface is horrible
-        m_dm = np.asarray(m_dm)
-        sv = np.asarray(sv)
+    @np.vectorize
+    def p_gamma(sv, m_dm):
+        return p_gamma_rg([sv, m_dm])
 
-        if m_dm.size > 1 and sv.size > 1:
-            return p_gamma_rg(np.array([m_dm, sv]).T)
-        elif m_dm.size > 1:
-            return p_gamma_rg(np.array([m_dm, sv*np.ones_like(m_dm)]).T)
-        elif sv.size > 1:
-            return p_gamma_rg(np.array([m_dm*np.ones_like(sv), sv]).T)
-        else:
-            return p_gamma_rg(np.array([m_dm, sv]))
+    @np.vectorize
+    def p_gamma_err(sv, m_dm):
+        return p_gamma_err_rg([sv, m_dm])
 
-    return m_dms, svs, p_gamma
+    return svs, m_dms, p_gamma, p_gamma_err
 
 
 def p_n_gamma(n_gamma, sv, f, p_gamma, m_pbh, m_dm):
@@ -164,10 +195,10 @@ def p_n_gamma(n_gamma, sv, f, p_gamma, m_pbh, m_dm):
         function of m_DM and <sigma v>.
     m_pbh : float
     """
-    return binom.pmf(n_gamma, n=np.floor(n_mw_pbhs(f, m_pbh)), p=p_gamma(m_dm, sv))
+    return binom.pmf(n_gamma, n=np.floor(n_mw_pbhs(f, m_pbh)), p=p_gamma(sv, m_dm))
 
 
-def p_u(n_gamma, n_u, prior="jeffreys"):
+def p_u(n_gamma, n_u, prior="log-flat"):
     """p(N_U | N_gamma), the probability of having a point source catalogue of
     size N_U given N_gamma PBHs passing the gamma-ray point source cuts.
 
@@ -179,26 +210,31 @@ def p_u(n_gamma, n_u, prior="jeffreys"):
     ----------
     n_u : int
     n_gamma : int
-    prior : "jeffreys", "uniform"
-        Specifies either a Jeffreys' prior (lambda^{-1/2}) or uniform prior for
-        lambda.
+    prior : "log-flat", "uniform"
+        Specifies the prior for lambda. Defaults to the conservative choice,
+        "log-flat". The optimistic case is "uniform", and "jeffreys" is in
+        between.
     """
-    if prior not in ["jeffreys", "uniform"]:
+    if prior not in ["log-flat", "jeffreys", "uniform"]:
         raise ValueError("Invalid prior on lambda")
 
+    @np.vectorize
     def _p_u(n_gamma):
         if n_u > n_gamma:
-            if prior == "jeffreys":
-                n_a = n_u - n_gamma
-                return special.gamma(n_a + 1/2) / special.gamma(n_a + 1)
+            if prior == "log-flat":
+                return 1. / (n_u - n_gamma)
+            elif prior == "jeffreys":
+                return (special.gamma(0.5 + n_u - n_gamma) /
+                        special.gamma(1. + n_u - n_gamma))
             elif prior == "uniform":
-                return 1
+                return 1.
         else:
             return 0
 
-    return np.vectorize(_p_u)(n_gamma)
+    return _p_u(n_gamma)
 
 
+@np.vectorize
 def posterior_integrand(sv, n_gamma, f, n_pbh, p_f, p_gamma, m_pbh, m_dm, n_u=n_u_0):
     """Computes the value of the integrand/summand in the expression for
     p(<sigma v> | N_PBH, N_U, M_PBH, m_DM).
@@ -215,26 +251,24 @@ def posterior_integrand(sv, n_gamma, f, n_pbh, p_f, p_gamma, m_pbh, m_dm, n_u=n_
     p_gamma : float, float -> float
         p_gamma as a function of m_DM and <sigma v>.
     """
-    return p_sv(sv) * p_f(f, n_pbh) * p_n_gamma(n_gamma, sv, f, p_gamma, m_pbh, m_dm) * p_u(n_gamma, n_u)
+    return p_sv(sv) * p_f(f) * p_n_gamma(n_gamma, sv, f, p_gamma, m_pbh, m_dm) * p_u(n_gamma, n_u)
 
 
+@np.vectorize
 def get_posterior_val(sv, n_pbh, p_f, p_gamma, m_pbh, m_dm, n_u=n_u_0):
     """Computes the posterior for <sigma v>. Supports broadcasting over sv and
     m_dm. See documentation for `posterior_integrand`.
     """
-    def get_posterior_val_(m_dm, sv):
-        post_val = 0
-        for n_gamma in np.arange(0, n_u+1, 1):
-            post_val += quad(
-                lambda f: posterior_integrand(sv, n_gamma, f, n_pbh, p_f, p_gamma, m_pbh, m_dm, n_u),
-                1e-6, 1, epsabs=1e-99)[0]
-        return post_val
-
-    return np.vectorize(get_posterior_val_)(m_dm, sv)
+    post_val = 0
+    for n_gamma in np.arange(0, n_u+1, 1):
+        post_val += quad(
+            lambda f: posterior_integrand(sv, n_gamma, f, n_pbh, p_f, p_gamma, m_pbh, m_dm, n_u),
+            1e-6, 1, epsabs=1e-99)[0]  # range used by Bradley
+    return post_val
 
 
 def save_posterior_table(svs, n_pbh, p_f, p_gamma, m_pbh, m_dms, n_u=n_u_0):
-    """Generates a table containing p_gamma.
+    """Generates a table containing the posterior for <sigma v>.
 
     Parameters
     ----------
@@ -247,22 +281,24 @@ def save_posterior_table(svs, n_pbh, p_f, p_gamma, m_pbh, m_dms, n_u=n_u_0):
         raise ValueError("svs must have more than one element")
     if m_dms.size <= 1:
         raise ValueError("m_dms must have more than one element")
-    m_dm_col = np.repeat(m_dms, svs.size)
-    sv_col = np.tile(svs, m_dms.size)
+
+    sv_col = np.repeat(svs, m_dms.size)
+    m_dm_col = np.tile(m_dms, svs.size)
     # Compute the table values
     post_vals = get_posterior_val(sv_col, n_pbh, p_f, p_gamma, m_pbh, m_dm_col, n_u)
     # Save the data table
-    post_path = "%sposterior_sv_M=%.1f_N=%i.csv" % (post_sv_dir, m_pbh, n_pbh)
-    post_tab = np.stack([m_dm_col, sv_col, post_vals]).T
+    post_path = "{}posterior_sv_M={:.1f}_N={}.csv".format(post_sv_dir, m_pbh, n_pbh)
+    post_tab = np.stack([sv_col, m_dm_col, post_vals]).T
     np.savetxt(post_path, post_tab,
-               header=("p(<sigma v> | N_PBH, M_PBH, m_DM, U) for M_PBH = %.1f M_sun.\n"
-                       "Columns are: m_DM (GeV), <sigma v> (cm^3/s), p(sv | ...).") % m_pbh)
+               header=("p(<sigma v> | N_PBH, M_PBH, m_DM, U) for M_PBH = {:.1f} M_sun.\n"
+                       "Columns are: <sigma v> (cm^3/s), m_DM (GeV), p(sv | ...).").format(m_pbh))
+
 
 
 def save_normalized_posterior_table(m_pbh, n_pbh):
     """Converts an existing unnormalized posterior table into a normalized
     posterior table. Does not check if the posterior already exists."""
-    m_dms, svs, unnormd_post_vals = load_posterior(m_pbh, n_pbh)
+    svs, m_dms, unnormd_post_vals = load_posterior(m_pbh, n_pbh)
     normd_post_vals = unnormd_post_vals.copy()
 
     for i, m_dm in enumerate(m_dms):
@@ -277,13 +313,13 @@ def save_normalized_posterior_table(m_pbh, n_pbh):
             print("Warning: normalization integral not converging well for m_dm={:e}".format(m_dm))
         normd_post_vals[i] = unnormd_post_vals[i] / norm
 
-    m_dm_col = np.repeat(m_dms, svs.size)
-    sv_col = np.tile(svs, m_dms.size)
+    sv_col = np.repeat(svs, m_dms.size)
+    m_dm_col = np.tile(m_dms, svs.size)
     normd_post_vals_col = normd_post_vals.flatten()
-    np.savetxt("%snormalized_posterior_sv_M=%.1f_N=%i.csv" % (post_sv_dir, m_pbh, n_pbh),
-               np.stack([m_dm_col, sv_col, normd_post_vals_col]).T,
+    np.savetxt("{}normalized_posterior_sv_M={:.1f}_N={}.csv".format(post_sv_dir, m_pbh, n_pbh),
+               np.stack([sv_col, m_dm_col, normd_post_vals_col]).T,
                header=("Normalized posterior for <sigma v>.\n"
-                       "Columns: m_DM (GeV), <sigma v> (cm^3/s), posterior."))
+                       "Columns: <sigma v> (cm^3/s), m_DM (GeV), posterior."))
 
 
 def load_posterior(m_pbh, n_pbh, normalized=False):
@@ -299,12 +335,12 @@ def load_posterior(m_pbh, n_pbh, normalized=False):
         prefix = "normalized_"
     else:
         prefix = ""
-    m_dm_col, sv_col, post_col = np.loadtxt("%s%sposterior_sv_M=%.1f_N=%i.csv" %
-                                            (post_sv_dir, prefix, m_pbh, n_pbh)).T
-    m_dms = np.unique(m_dm_col)
+    sv_col, m_dm_col, post_col = np.loadtxt(
+        "{}{}posterior_sv_M={:.1f}_N={}.csv".format(post_sv_dir, prefix, m_pbh, n_pbh)).T
     svs = np.unique(sv_col)
-    post_vals = post_col.reshape([m_dms.size, svs.size])
-    return m_dms, svs, post_vals
+    m_dms = np.unique(m_dm_col)
+    post_vals = post_col.reshape([svs.size, m_dms.size])
+    return svs, m_dms, post_vals
 
 
 def credible_interval(posterior, alpha, x_max, x_guess):
@@ -342,7 +378,7 @@ def save_sv_bounds(m_pbh, n_pbh, alpha=0.95):
         for the given PBH mass and number. Saves these bounds to the
         data/bounds/ directory.
     """
-    m_dms, svs, post_vals = load_posterior(m_pbh, n_pbh, normalized=True)
+    svs, m_dms, post_vals = load_posterior(m_pbh, n_pbh, normalized=True)
     sv_mg, m_dm_mg = np.meshgrid(svs, m_dms)
     sv_bounds = []
 
@@ -359,7 +395,7 @@ def save_sv_bounds(m_pbh, n_pbh, alpha=0.95):
 
     sv_bounds = np.array(sv_bounds)
 
-    np.savetxt("data/bounds/sv_bounds_M=%.1f_N=%i.csv" % (m_pbh, n_pbh),
+    np.savetxt("data/bounds/sv_bounds_M={:.1}f_N={}.csv".format(m_pbh, n_pbh),
                np.stack([m_dms, sv_bounds]).T,
                header="{}% CI bounds on <sigma v>.\nColumns: m_DM (GeV), <sigma v> (cm^3/s).".format(100*alpha))
 

@@ -206,8 +206,8 @@ class PBHHaloSim(object):
         self.fluxes = self._flux_helper(self.ann_rates, self.flux_fact, self.positions[0])
         return self.fluxes
 
-    def _n_det_expected(self):
-        """Determines the number of PBHs passing the flux and |b| cuts.
+    def _pr_det(self):
+        """Determines probability of a PBH passing the flux and |b| cuts.
         """
         # Indices of PBHs passing cuts
         self.passed_b_cut_idx = np.abs(self.positions[1]) > self.b_cut
@@ -223,6 +223,12 @@ class PBHHaloSim(object):
         self.pr_det = np.mean(self.detectable)
         # 95% confidence interval
         self.pr_det_err = 1.96 * np.std(self.detectable) / np.sqrt(self.n_samples)
+
+        return self.pr_det, self.pr_det_err
+
+    def _n_det_expected(self):
+        """Determines the number of PBHs passing the flux and |b| cuts.
+        """
         self.n_det = self.n_halo_pbhs * self.pr_det
         self.n_det_err = self.n_halo_pbhs * self.pr_det_err
 
@@ -244,4 +250,5 @@ class PBHHaloSim(object):
         self._get_angular_dist_bounds(efficient_angular_sampling)
         self._sample_positions(truncate_radial_samples)
         self._fluxes()
+        self._pr_det()
         self._n_det_expected()
