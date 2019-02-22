@@ -33,8 +33,8 @@ def load_p_f_gw(m_pbh, n_pbh, post_f_dir=post_f_dir, prior="log-flat"):
     experiment = "ET" if m_pbh == 10 else "O3"
     if prior == "log-flat":
         prior = "LF"
-    # elif prior == "jeffreys":
-    #     prior = "J"
+    elif prior == "jeffreys":
+        prior = "J"
     else:
         raise ValueError("Invalid merger rate prior")
 
@@ -42,27 +42,6 @@ def load_p_f_gw(m_pbh, n_pbh, post_f_dir=post_f_dir, prior="log-flat"):
         "{}Posterior_f_{}_Prior_{}_M={:.1f}_N={}.txt".format(post_f_dir, experiment, prior, m_pbh, n_pbh)).T
 
     return interp1d(fs, p_fs)
-    # if m_pbh == 10:  # Einstein telescope
-    #     f_pts, p_f_1_pts, p_f_10_pts, p_f_100_pts = np.loadtxt(
-    #         "{}Posterior_f_ET_M={:.1f}.txt".format(post_f_dir, m_pbh)).T
-    # elif m_pbh in ligo_masses:  # LIGO O3
-    #     f_pts, p_f_1_pts, p_f_10_pts, p_f_100_pts = np.loadtxt(
-    #         "{}Posterior_f_M={:.1f}.txt".format(post_f_dir, m_pbh)).T
-    # else:
-    #     raise ValueError("Invalid PBH mass")
-
-    # def p_f(f, n_pbh):
-    #     if n_pbh == 1:
-    #         p_f_pts = p_f_1_pts
-    #     elif n_pbh == 10:
-    #         p_f_pts = p_f_10_pts
-    #     elif n_pbh == 100:
-    #         p_f_pts = p_f_100_pts
-    #     else:
-    #         raise ValueError("Invalid number of GW detections")
-    #     return np.interp(f, f_pts, p_f_pts)
-
-    # return p_f
 
 
 def p_sv(sv, prior="uniform"):
@@ -254,6 +233,31 @@ def posterior_integrand(sv, n_gamma, f, n_pbh, p_f, p_gamma, m_pbh, m_dm, n_u=n_
     return p_sv(sv) * p_f(f) * p_n_gamma(n_gamma, sv, f, p_gamma, m_pbh, m_dm) * p_u(n_gamma, n_u)
 
 
+def get_f_samples(fs, integrand_vals, frac=0.1, n=10):
+    """Samples log-space points around the peak of the posterior integrand.
+
+    Returns
+    -------
+    Array of log-spaced values of f out to where the integrand decreases to
+    10% of its maximum value, and the f at which it attains its maximum value.
+    """
+    integrand_max = integrand_vals.max()
+    # Choose some fraction of the max value to sample out to
+    min_sample_val = frac * integrand_max
+    d = np.sign(min_sample_val - integrand_vals[:-1]) - np.sign(min_sample_val - integrand_vals[1:])
+    try:
+        f_low = fs[max(0, np.where(d > 0)[0][0])]
+    except:
+        f_low = fs[0]
+    try:
+        f_high = fs[min(len(fs)-1, np.where(d < 0)[0][-1])]
+    except:
+        f_high = fs[-1]
+
+    return np.append(np.logspace(np.log10(f_low), np.log10(f_high), n),
+                     fs[np.argmax(integrand_vals)])
+
+
 @np.vectorize
 def get_posterior_val(sv, n_pbh, p_f, p_gamma, m_pbh, m_dm, n_u=n_u_0):
     """Computes the posterior for <sigma v>. Supports broadcasting over sv and
@@ -261,9 +265,15 @@ def get_posterior_val(sv, n_pbh, p_f, p_gamma, m_pbh, m_dm, n_u=n_u_0):
     """
     post_val = 0
     for n_gamma in np.arange(0, n_u+1, 1):
-        post_val += quad(
-            lambda f: posterior_integrand(sv, n_gamma, f, n_pbh, p_f, p_gamma, m_pbh, m_dm, n_u),
-            1e-6, 1, epsabs=1e-99)[0]  # range used by Bradley
+        def integrand(f):
+            return posterior_integrand(sv, n_gamma, f, n_pbh, p_f, p_gamma, m_pbh, m_dm, n_u)
+
+        # Make sure quad samples near the integrand's peak
+        fs = np.logspace(-6, 0, 100)  # f range used by Bradley
+        points_f = get_f_samples(fs, integrand(fs))
+
+        post_val += quad(integrand, 1e-6, 1, points=points_f, epsabs=1e-99)[0]
+
     return post_val
 
 
