@@ -54,6 +54,7 @@ def parse_args():
     parser.add_argument("-log10_sv_max", default=-25, type=float, help="log10 of maximum <sigma v> in cm^3/s")
     parser.add_argument("-n_sv", default=200, type=int, help="Number of <sigma v> values")
     parser.add_argument("-v", "--verbose", default=True, type=bool, help="If True, prints progress messages")
+    parser.add_argument("-prior_R", "--merger_rate_prior", required=True, type=str, help="Prior for PBH merger rate: 'log-flat' or 'jeffreys'")
     return parser.parse_args()
 
 
@@ -92,7 +93,7 @@ if __name__ == '__main__':
     # Loads p(f|N_PBH) for GW experiments, computed by Bradley
     if args.verbose:
         print("Loading p(f|n_pbh) for GW experiments")
-    p_f = load_p_f_gw(args.m_pbh, args.n_pbh)
+    p_f = load_p_f_gw(args.m_pbh, args.n_pbh, prior=args.merger_rate_prior)
 
     # Compute posterior for <sigma v>
     if args.verbose:
