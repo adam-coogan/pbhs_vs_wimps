@@ -12,6 +12,9 @@ post_f_dir = "data/posteriors_f/"
 post_sv_dir = "data/posteriors_sv/"
 p_gamma_dir = "data/p_gammas/"
 ligo_masses = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+# f range used by Bradley
+log10_f_min, log10_f_max = -6, 0
+f_min, f_max = 1e-6, 1
 
 
 def load_p_f_gw(m_pbh, n_pbh, post_f_dir=post_f_dir, prior="log-flat"):
@@ -270,10 +273,10 @@ def get_posterior_val(sv, n_pbh, p_f, p_gamma, m_pbh, m_dm, n_u=n_u_0):
             return posterior_integrand(sv, n_gamma, f, n_pbh, p_f, p_gamma, m_pbh, m_dm, n_u)
 
         # Make sure quad samples near the integrand's peak
-        fs = np.logspace(-6, 0, 100)  # f range used by Bradley
+        fs = np.logspace(log10_f_min, log10_f_max, 100)
         points_f = get_f_samples(fs, integrand(fs))
 
-        post_val += quad(integrand, 1e-6, 1, points=points_f, epsabs=1e-99)[0]
+        post_val += quad(integrand, f_min, f_max, points=points_f, epsabs=1e-99)[0]
 
     return post_val
 
