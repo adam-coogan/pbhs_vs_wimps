@@ -43,18 +43,20 @@ Command line arguments
 
 def parse_args():
     parser = ArgumentParser()
+    # Required
     parser.add_argument("-m_pbh", type=float, required=True, help="PBH mass, M_sun")
-    parser.add_argument("-n_pbh", type=int, required=True, help="Number of detected PBHs")
-    parser.add_argument("-o", "--overwrite_p_gamma", type=bool, default=True, help="If True, overwrites existing p_gamma tables")
-    parser.add_argument("-n_samples", default=100000, type=int, help="Number of MC samples to use for p_gamma calculation")
+    parser.add_argument("-n_pbh", type=int, required=True, help="number of detected PBHs")
+    # Optional
+    parser.add_argument("-o", "--overwrite_p_gamma", type=bool, default=True, help="if True, overwrites existing p_gamma tables")
+    parser.add_argument("-n_samples", default=100000, type=int, help="number of MC samples to use for p_gamma calculation")
     parser.add_argument("-log10_m_dm_min", default=1, type=float, help="log10 of minimum DM mass in GeV")
     parser.add_argument("-log10_m_dm_max", default=4, type=float, help="log10 of maximum DM mass in GeV")
-    parser.add_argument("-n_m_dm", default=200, type=int, help="Number of DM masses")
+    parser.add_argument("-n_m_dm", default=200, type=int, help="number of DM masses")
     parser.add_argument("-log10_sv_min", default=-45, type=float, help="log10 of minimum <sigma v> in cm^3/s")
     parser.add_argument("-log10_sv_max", default=-25, type=float, help="log10 of maximum <sigma v> in cm^3/s")
-    parser.add_argument("-n_sv", default=200, type=int, help="Number of <sigma v> values")
-    parser.add_argument("-v", "--verbose", default=True, type=bool, help="If True, prints progress messages")
-    parser.add_argument("-prior_R", "--merger_rate_prior", required=True, type=str, help="Prior for PBH merger rate: 'log-flat' or 'jeffreys'")
+    parser.add_argument("-n_sv", default=200, type=int, help="number of <sigma v> values")
+    parser.add_argument("-v", "--verbose", default=True, type=bool, help="if True, prints progress messages")
+    parser.add_argument("-prior_R", "--merger_rate_prior", default="log-flat", type=str, help="prior for PBH merger rate: 'log-flat' or 'jeffreys'")
     return parser.parse_args()
 
 
