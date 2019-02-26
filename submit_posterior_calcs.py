@@ -82,13 +82,13 @@ if __name__ == '__main__':
     # Make/load p_gamma
     if not args.overwrite_p_gamma:
         try:
-            m_dms, svs, p_gamma, p_gamma_err = load_p_gamma(args.m_pbh)
+            svs, m_dms, p_gamma, p_gamma_err = load_p_gamma(args.m_pbh)
             if args.verbose:
                 print("Using existing p_gamma table")
         except:
-            m_dms, svs, p_gamma, p_gamma_err = save_and_load_p_gammas(args)
+            svs, m_dms, p_gamma, p_gamma_err = save_and_load_p_gammas(args)
     else:
-        m_dms, svs, p_gamma, p_gamma_err = save_and_load_p_gammas(args)
+        svs, m_dms, p_gamma, p_gamma_err = save_and_load_p_gammas(args)
 
     # Loads p(f|N_PBH) for GW experiments, computed by Bradley
     if args.verbose:

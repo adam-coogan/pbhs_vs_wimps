@@ -99,6 +99,7 @@ def save_p_gamma_table(m_pbh, m_dms, svs, fs=fs_0, flux_type=flux_type_0, b_cut=
         raise ValueError("m_dms must have more than one element")
     if svs.size <= 1:
         raise ValueError("svs must have more than one element")
+
     sv_col = np.repeat(svs, m_dms.size)
     m_dm_col = np.tile(m_dms, svs.size)
     # Compute the table values
@@ -302,7 +303,6 @@ def save_posterior_table(svs, n_pbh, p_f, p_gamma, m_pbh, m_dms, n_u=n_u_0):
     np.savetxt(post_path, post_tab,
                header=("p(<sigma v> | N_PBH, M_PBH, m_DM, U) for M_PBH = {:.1f} M_sun.\n"
                        "Columns are: <sigma v> (cm^3/s), m_DM (GeV), p(sv | ...).").format(m_pbh))
-
 
 
 def save_normalized_posterior_table(m_pbh, n_pbh):
