@@ -1,5 +1,5 @@
 import numpy as np
-from constants import fs_0, n_u_0, flux_type_0, flux_thresh_0, b_cut_0
+from constants import fs_0, flux_type_0, flux_thresh_0, b_cut_0
 from constants import n_mw_pbhs
 from scipy.integrate import quad, dblquad, trapz
 from scipy.interpolate import interp1d, RegularGridInterpolator
@@ -17,7 +17,7 @@ log10_f_min, log10_f_max = -6, 0
 f_min, f_max = 1e-6, 1
 
 
-def load_p_f_gw(m_pbh, n_pbh, post_f_dir=post_f_dir, prior="log-flat"):
+def load_p_f_gw(m_pbh, n_pbh, post_f_dir=post_f_dir, prior="LF"):
     """Loads p(f_PBH | N_PBH) for gravitational wave detectors.
 
     Parameters
@@ -26,47 +26,45 @@ def load_p_f_gw(m_pbh, n_pbh, post_f_dir=post_f_dir, prior="log-flat"):
         PBH mass
     n_pbh : int
         The number of detections via gravitational waves.
-    prior : "log-flat", "jeffreys"
-        Prior on merger rate. Defaults to the conservative choice, "log-flat".
+    prior : "LF", "J"
+        Prior on merger rate. Defaults to the conservative choice, "LF".
 
     Returns
     -------
     p_f : float, int -> float
     """
     experiment = "ET" if m_pbh == 10 else "O3"
-    if prior == "log-flat":
-        prior = "LF"
-    elif prior == "jeffreys":
-        prior = "J"
-    else:
+    if prior not in ["LF", "J"]:
         raise ValueError("Invalid merger rate prior")
 
     fs, p_fs = np.loadtxt(
         "{}Posterior_f_{}_Prior_{}_M={:.1f}_N={}.txt".format(post_f_dir, experiment, prior, m_pbh, n_pbh)).T
 
-    return interp1d(fs, p_fs)
+    def p_f(f, cur_prior):  # ugly
+        if cur_prior != prior:
+            raise ValueError("Calling p_f with the prior '{}', but it was loaded with '{}'".format(cur_prior, prior))
+        else:
+            return np.interp(f, fs, p_fs, left=0, right=0)
+
+    return p_f
 
 
-def p_sv(sv, prior="uniform"):
+@np.vectorize
+def p_sv(sv, prior="U"):
     """p(<sigma v>), the prior on <sigma v>.
 
     Parameters
     ----------
-    prior: "uniform", "log-flat"
+    prior: "U", "LF"
         Determines which prior to use. Defaults to the conservative choice,
-        "uniform".
+        "U".
     """
-    if prior not in ["uniform", "log-flat"]:
+    if prior not in ["U", "LF"]:
         raise ValueError("Invalid prior on <sigma v>")
-
-    @np.vectorize
-    def _p_sv(sv):
-        if prior == "log-flat":
-            return 1 / sv
-        elif prior == "uniform":
-            return 1
-
-    return _p_sv(sv)
+    elif prior == "LF":
+        return 1 / sv
+    elif prior == "U":
+        return 1
 
 
 @np.vectorize
@@ -181,44 +179,36 @@ def p_n_gamma(n_gamma, sv, f, p_gamma, m_pbh, m_dm):
     return binom.pmf(n_gamma, n=np.floor(n_mw_pbhs(f, m_pbh)), p=p_gamma(sv, m_dm))
 
 
-def p_u(n_gamma, n_u, prior="log-flat"):
+@np.vectorize
+def p_u(n_gamma, n_u, prior="LF"):
     """p(N_U | N_gamma), the probability of having a point source catalogue of
     size N_U given N_gamma PBHs passing the gamma-ray point source cuts.
-
-    To-do
-    -----
-    Implement log-flat prior.
 
     Parameters
     ----------
     n_u : int
     n_gamma : int
-    prior : "log-flat", "uniform"
+    prior : "LF", "U"
         Specifies the prior for lambda. Defaults to the conservative choice,
-        "log-flat". The optimistic case is "uniform", and "jeffreys" is in
-        between.
+        "LF". The optimistic case is "U", and "J" is in-between.
     """
-    if prior not in ["log-flat", "jeffreys", "uniform"]:
+    if prior not in ["LF", "J", "U"]:
         raise ValueError("Invalid prior on lambda")
-
-    @np.vectorize
-    def _p_u(n_gamma):
-        if n_u > n_gamma:
-            if prior == "log-flat":
-                return 1. / (n_u - n_gamma)
-            elif prior == "jeffreys":
-                return (special.gamma(0.5 + n_u - n_gamma) /
-                        special.gamma(1. + n_u - n_gamma))
-            elif prior == "uniform":
-                return 1.
-        else:
-            return 0
-
-    return _p_u(n_gamma)
+    elif n_u > n_gamma:
+        if prior == "LF":
+            return 1. / (n_u - n_gamma)
+        elif prior == "J":
+            return (special.gamma(0.5 + n_u - n_gamma) /
+                    special.gamma(1. + n_u - n_gamma))
+        elif prior == "U":
+            return 1.
+    else:
+        return 0
 
 
 @np.vectorize
-def posterior_integrand(sv, n_gamma, f, n_pbh, p_f, p_gamma, m_pbh, m_dm, n_u=n_u_0):
+def posterior_integrand(sv, n_gamma, f, n_pbh, p_f, p_gamma, m_pbh, m_dm, n_u,
+                        merger_rate_prior, lambda_prior, sv_prior):
     """Computes the value of the integrand/summand in the expression for
     p(<sigma v> | N_PBH, N_U, M_PBH, m_DM).
 
@@ -234,7 +224,9 @@ def posterior_integrand(sv, n_gamma, f, n_pbh, p_f, p_gamma, m_pbh, m_dm, n_u=n_
     p_gamma : float, float -> float
         p_gamma as a function of m_DM and <sigma v>.
     """
-    return p_sv(sv) * p_f(f) * p_n_gamma(n_gamma, sv, f, p_gamma, m_pbh, m_dm) * p_u(n_gamma, n_u)
+    return (p_sv(sv, sv_prior) * p_f(f, merger_rate_prior) *
+            p_u(n_gamma, n_u, lambda_prior) *
+            p_n_gamma(n_gamma, sv, f, p_gamma, m_pbh, m_dm))
 
 
 def get_f_samples(fs, integrand_vals, frac=0.1, n=10):
@@ -263,14 +255,17 @@ def get_f_samples(fs, integrand_vals, frac=0.1, n=10):
 
 
 @np.vectorize
-def get_posterior_val(sv, n_pbh, p_f, p_gamma, m_pbh, m_dm, n_u=n_u_0):
+def get_posterior_val(sv, n_pbh, p_f, p_gamma, m_pbh, m_dm, n_u,
+                      merger_rate_prior, lambda_prior, sv_prior):
     """Computes the posterior for <sigma v>. Supports broadcasting over sv and
     m_dm. See documentation for `posterior_integrand`.
     """
     post_val = 0
     for n_gamma in np.arange(0, n_u+1, 1):
         def integrand(f):
-            return posterior_integrand(sv, n_gamma, f, n_pbh, p_f, p_gamma, m_pbh, m_dm, n_u)
+            return posterior_integrand(sv, n_gamma, f, n_pbh, p_f, p_gamma,
+                                       m_pbh, m_dm, n_u, merger_rate_prior,
+                                       lambda_prior, sv_prior)
 
         # Make sure quad samples near the integrand's peak
         fs = np.logspace(log10_f_min, log10_f_max, 100)
@@ -281,7 +276,8 @@ def get_posterior_val(sv, n_pbh, p_f, p_gamma, m_pbh, m_dm, n_u=n_u_0):
     return post_val
 
 
-def save_posterior_table(svs, n_pbh, p_f, p_gamma, m_pbh, m_dms, n_u=n_u_0):
+def save_posterior_table(svs, n_pbh, p_f, p_gamma, m_pbh, m_dms, n_u,
+                         merger_rate_prior, lambda_prior, sv_prior):
     """Generates a table containing the posterior for <sigma v>.
 
     Parameters
@@ -299,9 +295,11 @@ def save_posterior_table(svs, n_pbh, p_f, p_gamma, m_pbh, m_dms, n_u=n_u_0):
     sv_col = np.repeat(svs, m_dms.size)
     m_dm_col = np.tile(m_dms, svs.size)
     # Compute the table values
-    post_vals = get_posterior_val(sv_col, n_pbh, p_f, p_gamma, m_pbh, m_dm_col, n_u)
+    post_vals = get_posterior_val(sv_col, n_pbh, p_f, p_gamma, m_pbh, m_dm_col,
+                                  n_u, merger_rate_prior, lambda_prior,
+                                  sv_prior)
     # Save the data table
-    post_path = "{}posterior_sv_M={:.1f}_N={}.csv".format(post_sv_dir, m_pbh, n_pbh)
+    post_path = "{}posterior_sv_M={:.1f}_N={}_prior_rate={}_prior_lambda={}_prior_sv={}.csv".format(post_sv_dir, m_pbh, n_pbh, merger_rate_prior, lambda_prior, sv_prior)
     post_tab = np.stack([sv_col, m_dm_col, post_vals]).T
     np.savetxt(post_path, post_tab,
                header=("p(<sigma v> | N_PBH, M_PBH, m_DM, U) for M_PBH = {:.1f} M_sun.\n"

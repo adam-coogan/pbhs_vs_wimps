@@ -2,6 +2,7 @@ from argparse import ArgumentParser
 import numpy as np
 from posterior_inference import save_p_gamma_table, load_p_gamma
 from posterior_inference import load_p_f_gw, save_posterior_table
+from constants import n_u_0
 
 
 """
@@ -47,6 +48,7 @@ def parse_args():
     parser.add_argument("-m_pbh", type=float, required=True, help="PBH mass, M_sun")
     parser.add_argument("-n_pbh", type=int, required=True, help="number of detected PBHs")
     # Optional
+    parser.add_argument("-n_u", "--n_unassociated", type=int, default=n_u_0, help="number of unassociated point sources")
     parser.add_argument("-o", "--overwrite_p_gamma", type=bool, default=True, help="if True, overwrites existing p_gamma tables")
     parser.add_argument("-n_samples", default=100000, type=int, help="number of MC samples to use for p_gamma calculation")
     parser.add_argument("-log10_m_dm_min", default=1, type=float, help="log10 of minimum DM mass in GeV")
@@ -56,7 +58,9 @@ def parse_args():
     parser.add_argument("-log10_sv_max", default=-25, type=float, help="log10 of maximum <sigma v> in cm^3/s")
     parser.add_argument("-n_sv", default=200, type=int, help="number of <sigma v> values")
     parser.add_argument("-v", "--verbose", default=True, type=bool, help="if True, prints progress messages")
-    parser.add_argument("-prior_R", "--merger_rate_prior", default="log-flat", type=str, help="prior for PBH merger rate: 'log-flat' or 'jeffreys'")
+    parser.add_argument("-p_R", "--merger_rate_prior", default="LF", type=str, help="prior for PBH merger rate: 'LF' or 'J'")
+    parser.add_argument("-p_lambda", "--lambda_prior", default="LF", type=str, help="prior for lambda: 'LF' or 'U'")
+    parser.add_argument("-p_sv", "--sv_prior", default="U", type=str, help="prior for <sigma v>: 'U' or 'LF'")
     return parser.parse_args()
 
 
@@ -100,6 +104,8 @@ if __name__ == '__main__':
     # Compute posterior for <sigma v>
     if args.verbose:
         print("Computing posterior for <sigma v>")
-    save_posterior_table(svs, args.n_pbh, p_f, p_gamma, args.m_pbh, m_dms)
+    save_posterior_table(svs, args.n_pbh, p_f, p_gamma, args.m_pbh, m_dms,
+                         args.n_unassociated, args.merger_rate_prior,
+                         args.lambda_prior, args.sv_prior)
     if args.verbose:
         print("Done computing")
