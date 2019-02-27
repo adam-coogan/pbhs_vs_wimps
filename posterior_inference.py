@@ -306,10 +306,10 @@ def save_posterior_table(svs, n_pbh, p_f, p_gamma, m_pbh, m_dms, n_u,
                        "Columns are: <sigma v> (cm^3/s), m_DM (GeV), p(sv | ...).").format(m_pbh))
 
 
-def save_normalized_posterior_table(m_pbh, n_pbh):
+def save_normalized_posterior_table(m_pbh, n_pbh, merger_rate_prior, lambda_prior, sv_prior):
     """Converts an existing unnormalized posterior table into a normalized
     posterior table. Does not check if the posterior already exists."""
-    svs, m_dms, unnormd_post_vals = load_posterior(m_pbh, n_pbh)
+    svs, m_dms, unnormd_post_vals = load_posterior(m_pbh, n_pbh, merger_rate_prior, lambda_prior, sv_prior)
     normd_post_vals = unnormd_post_vals.copy()
 
     for i, m_dm in enumerate(m_dms):
@@ -327,13 +327,14 @@ def save_normalized_posterior_table(m_pbh, n_pbh):
     sv_col = np.repeat(svs, m_dms.size)
     m_dm_col = np.tile(m_dms, svs.size)
     normd_post_vals_col = normd_post_vals.flatten()
-    np.savetxt("{}normalized_posterior_sv_M={:.1f}_N={}.csv".format(post_sv_dir, m_pbh, n_pbh),
+    np.savetxt(("{}normalized_posterior_sv_M={:.1f}_N={}_prior_rate={}_" +
+                "prior_lambda={}_prior_sv={}.csv").format(post_sv_dir, m_pbh, n_pbh, merger_rate_prior, lambda_prior, sv_prior),
                np.stack([sv_col, m_dm_col, normd_post_vals_col]).T,
                header=("Normalized posterior for <sigma v>.\n"
                        "Columns: <sigma v> (cm^3/s), m_DM (GeV), posterior."))
 
 
-def load_posterior(m_pbh, n_pbh, normalized=False):
+def load_posterior(m_pbh, n_pbh, merger_rate_prior, lambda_prior, sv_prior, normalized=False):
     """Loads a table of posterior values for <sigma v>.
 
     Returns
@@ -347,7 +348,8 @@ def load_posterior(m_pbh, n_pbh, normalized=False):
     else:
         prefix = ""
     sv_col, m_dm_col, post_col = np.loadtxt(
-        "{}{}posterior_sv_M={:.1f}_N={}.csv".format(post_sv_dir, prefix, m_pbh, n_pbh)).T
+        "{}{}posterior_sv_M={:.1f}_N={}_prior_rate={}_prior_lambda={}_prior_sv={}.csv".format(
+            post_sv_dir, prefix, m_pbh, n_pbh, merger_rate_prior, lambda_prior, sv_prior)).T
     svs = np.unique(sv_col)
     m_dms = np.unique(m_dm_col)
     post_vals = post_col.reshape([svs.size, m_dms.size])
