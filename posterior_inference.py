@@ -1,7 +1,7 @@
 import numpy as np
 from constants import fs_0, flux_type_0, flux_thresh_0, b_cut_0
 from constants import n_mw_pbhs
-from scipy.integrate import quad, dblquad, trapz
+from scipy.integrate import quad, dblquad, trapz, cumtrapz
 from scipy.interpolate import interp1d, RegularGridInterpolator
 from scipy.optimize import root_scalar, minimize_scalar
 from scipy.stats import binom, norm, poisson
@@ -311,12 +311,17 @@ def save_normalized_posterior_table(m_pbh, n_pbh, merger_rate_prior, lambda_prio
     posterior table. Does not check if the posterior already exists."""
     svs, m_dms, unnormd_post_vals = load_posterior(m_pbh, n_pbh, merger_rate_prior, lambda_prior, sv_prior)
     normd_post_vals = unnormd_post_vals.copy()
-    svs_dense = np.logspace(np.log10(svs[0]), np.log10(svs[-1]), 100000)
+    #svs_dense = np.logspace(np.log10(svs[0]), np.log10(svs[-1]), 100)
 
     for i, (m_dm, un_p_vals) in enumerate(zip(m_dms, unnormd_post_vals.T)):
         # Construct interpolator up to value of <sigma v> where posterior is 0
         unnormd_posterior = interp1d(svs, un_p_vals, bounds_error=None, fill_value="extrapolate")
-        norm = trapz(unnormd_posterior(svs_dense), svs_dense)
+        # norm = trapz(unnormd_posterior(svs_dense), svs_dense)
+        norm, err = quad(unnormd_posterior, 0, svs[-1], epsabs=0, points=svs,
+                         limit=len(svs)*2)
+        if err / norm > 1e-4:
+            print("Warning: large error in posterior normalization")
+
         normd_post_vals[:, i] = un_p_vals / norm
 
     sv_col = np.repeat(svs, m_dms.size)
@@ -360,23 +365,11 @@ def post_sv_ci(svs, post_vals, alpha=0.95):
     -------
     sv_alpha : float
     """
-    # Initial guess: value of <sigma v> where posterior equals 5% of its max
-    idx_map = np.argmax(post_vals)
-    sv_map = svs[idx_map]
-    post_map = post_vals[idx_map]
-    post_high_thresh = 0.05 * post_map
-    sv_guess = svs[idx_map + np.argmin(np.abs(post_vals[idx_map:] - post_high_thresh))]
-
-    posterior = interp1d(svs, post_vals, bounds_error=None, fill_value="extrapolate")
-
-    # Find sv_alpha in log space
-    def objective(log10_sv):
-        svs_dense = np.logspace(np.log10(svs[0]), log10_sv, 100000)
-        return (trapz(posterior(svs_dense), svs_dense) - alpha)**2
-
-    return 10**minimize_scalar(objective, bounds=[np.log10(svs[0]), np.log10(svs[-1])],
-                               bracket=[np.log10(svs[1]), np.log10(sv_guess), np.log10(svs[-2])],
-                               tol=1e-10, method="bounded").x
+    cdf = interp1d(svs[1:], cumtrapz(post_vals, svs))
+    sol = root_scalar(lambda log10_sv: cdf(10**log10_sv) - alpha, bracket=list(np.log10(svs[[1, -1]])))
+    if not sol.converged:
+        print("Warning: root_scalar did not converge")
+    return 10**sol.root
 
 
 def save_sv_bounds(m_pbh, n_pbh, merger_rate_prior, lambda_prior, sv_prior, alpha=0.95):
