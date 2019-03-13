@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy import integrate
 from scipy import stats
-from scipy.interpolate import interp1d
+from scipy.interpolate import interp1d, interp2d
 
 """
 Constants and utility functions.
@@ -22,12 +22,16 @@ L_sun_to_GeV_s = 2.402e36
 GeV_s_to_L_sun = 1 / L_sun_to_GeV_s
 L_sun_to_erg_s = L_sun_to_GeV_s * GeV_to_erg
 erg_s_to_L_sun = 1 / L_sun_to_erg_s
+speed_of_light = 299792.458  # km / s
 
 # Best-fit Einasto parameters for Milky Way halo. From PPPC.
 alpha_mw = 0.17
 r_s_mw = 28.44  # kpc
 rho_e_mw = 0.033 * GeV_to_m_sun / cm_to_kpc**3  # M_sun / kpc^3
 Omega_cdm = 0.2589  # from Planck 2015
+Omega_m_0 = 0.3
+Omega_Lambda_0 = 0.7
+rho_dm_avg_0 = 1.15e-6 * GeV_to_m_sun / cm_to_kpc**3  # avg cosmological DM density
 z_eq = 3500.
 z_final = 30.  # redshift at which to end PBH halo evolution
 d_earth = 8.33  # kpc
@@ -47,6 +51,33 @@ flux_type_0 = "dnde"
 flux_thresh_0 = 7e-10  # cm^-2 s^-1
 b_cut_0 = 20  # deg
 h_hubble = 0.7  # H_0 = h 100 km/s / Mpc
+
+def hubble(z):  # km/s / Mpc
+    return (100 * h_hubble) * np.sqrt(Omega_m_0 * (1 + z)**3 + Omega_Lambda_0)
+
+def load_exp_tau_interp():
+    e_et, zp_et, exp_tau_tab = np.loadtxt("data/exptau.csv").T
+    e_et = np.array(sorted(list(set(e_et))))
+    zp_et = np.array(sorted(list(set(zp_et))))
+    exp_tau_tab = exp_tau_tab.reshape([len(e_et), len(zp_et)])
+    return interp2d(e_et, zp_et, exp_tau_tab.T)
+
+def load_spec_interps():
+    # Load data as a structured array
+    data = np.genfromtxt("data/dN_dlog10x_gammas.dat", dtype=float, delimiter=" ", names=True)
+    fss = data.dtype.names[2:]
+    m_dm_tab = data["mDM"]
+    m_dms = np.array(sorted(list(set(m_dm_tab))))
+    log10x_tab = data["Log10x"]
+    log10xs = np.array(sorted(list(set(log10x_tab))))
+    dnde_interps = {}
+
+    for fs in fss:
+        dn_dlog10xs = data[fs].reshape([len(m_dms), len(log10xs)])
+        interpolator = interp2d(log10xs, m_dms, dn_dlog10xs, fill_value=0.)
+        dnde_interps[fs] = lambda e, m_dm: interpolator(np.log10(e / m_dm), m_dm).flatten() / (np.log(10) * e)
+
+    return dnde_interps
 
 def load_int_spec_interps(e_low=1, e_high=None):
     """Loads interpolators for integrated photon spectra for different final states,
@@ -123,7 +154,7 @@ def to_galactic_coords(r, th, phi, deg=True):
         return np.stack([d, b, l])
 
 def rho_einasto(r, rho_e=rho_e_mw, r_s=r_s_mw, alpha=alpha_mw):
-    """Einasto density profile."""
+    """Einasto density profile, M_sun/kpc^3."""
     return rho_e * np.exp(-2/alpha * ((r / r_s)**alpha - 1))
 
 # Total MW DM mass in M_sun. Cross-checked with PPPC.
@@ -143,3 +174,33 @@ def gamma_tr_sample(x_min, x_max, shape=1, scale=1):
     cdf_max = distro.cdf(x_max)
     samples = distro.ppf(cdf_min + np.random.uniform(size=size) * (cdf_max - cdf_min))
     return samples
+
+I100 = 1.48e-7 * 1e3 # GeV^-1 cm^-2 s^-1 sr^-1
+gamma_fermi = 2.31
+e_cut = 362.  # GeV
+
+def phi_g_egb_fermi(e):
+    """Fermi extragalactic gamma ray background flux.
+
+    Returns
+    -------
+    float
+        EGB in GeV^-1 cm^-2 s^-1 sr^-1.
+    """
+    return I100 * (e / 0.1)**(-gamma_fermi) * np.exp(-e / e_cut)
+
+def mantissa_exp(x):
+    exp = np.floor(np.log10(x))
+    return x/10**exp, exp
+
+def sci_fmt(val):
+    m, e = mantissa_exp(val)
+    if e == 0:
+        return "{:g}".format(m)
+    else:
+        e_str = "{:g}".format(e)
+        if m == 1:
+            return r"10^{" + e_str + "}"
+        else:
+            m_str = "{:g}".format(m)
+            return (r"{" + m_str + r"} \times 10^{" + e_str + "}")

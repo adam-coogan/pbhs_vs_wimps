@@ -1,9 +1,9 @@
 import numpy as np
 from constants import fs_0, flux_type_0, flux_thresh_0, b_cut_0
 from constants import n_mw_pbhs
-from scipy.integrate import quad, dblquad, trapz
+from scipy.integrate import quad, dblquad, trapz, cumtrapz
 from scipy.interpolate import interp1d, RegularGridInterpolator
-from scipy.optimize import root_scalar
+from scipy.optimize import root_scalar, minimize_scalar
 from scipy.stats import binom, norm, poisson
 from scipy import special
 from pbhhalosim import PBHHaloSim
@@ -237,7 +237,7 @@ def posterior_integrand(sv, n_gamma, f, n_pbh, p_f, p_gamma, m_pbh, m_dm, n_u,
             p_n_gamma(n_gamma, sv, f, p_gamma, m_pbh, m_dm))
 
 
-def get_f_samples(fs, integrand_vals, frac=0.1, n=10):
+def _get_f_samples(fs, integrand_vals, frac=0.1, n=10):
     """Samples log-space points around the peak of the posterior integrand.
 
     Returns
@@ -277,7 +277,7 @@ def get_posterior_val(sv, n_pbh, p_f, p_gamma, m_pbh, m_dm, n_u,
 
         # Make sure quad samples near the integrand's peak
         fs = np.logspace(log10_f_min, log10_f_max, 100)
-        points_f = get_f_samples(fs, integrand(fs))
+        points_f = _get_f_samples(fs, integrand(fs))
 
         post_val += quad(integrand, f_min, f_max, points=points_f, epsabs=1e-99)[0]
 
@@ -314,34 +314,35 @@ def save_posterior_table(svs, n_pbh, p_f, p_gamma, m_pbh, m_dms, n_u,
                        "Columns are: <sigma v> (cm^3/s), m_DM (GeV), p(sv | ...).").format(m_pbh))
 
 
-def save_normalized_posterior_table(m_pbh, n_pbh):
+def save_normalized_posterior_table(m_pbh, n_pbh, merger_rate_prior, lambda_prior, sv_prior):
     """Converts an existing unnormalized posterior table into a normalized
     posterior table. Does not check if the posterior already exists."""
-    svs, m_dms, unnormd_post_vals = load_posterior(m_pbh, n_pbh)
+    svs, m_dms, unnormd_post_vals = load_posterior(m_pbh, n_pbh, merger_rate_prior, lambda_prior, sv_prior)
     normd_post_vals = unnormd_post_vals.copy()
+    #svs_dense = np.logspace(np.log10(svs[0]), np.log10(svs[-1]), 100)
 
-    for i, m_dm in enumerate(m_dms):
+    for i, (m_dm, un_p_vals) in enumerate(zip(m_dms, unnormd_post_vals.T)):
         # Construct interpolator up to value of <sigma v> where posterior is 0
-        post_zero_idx = np.where(unnormd_post_vals[i] == 0)[0][0] + 1
-        svs_range = svs[:post_zero_idx]
-        unnormd_posterior = interp1d(svs_range, unnormd_post_vals[i, :post_zero_idx],
-                                     bounds_error=None, fill_value="extrapolate")
-        # Normalize posterior
-        norm, norm_err = quad(unnormd_posterior, 0, svs_range[-1], epsabs=1e-200, epsrel=1e-4, limit=200)
-        if norm_err / norm > 1e-3:
-            print("Warning: normalization integral not converging well for m_dm={:e}".format(m_dm))
-        normd_post_vals[i] = unnormd_post_vals[i] / norm
+        unnormd_posterior = interp1d(svs, un_p_vals, bounds_error=None, fill_value="extrapolate")
+        # norm = trapz(unnormd_posterior(svs_dense), svs_dense)
+        norm, err = quad(unnormd_posterior, 0, svs[-1], epsabs=0, points=svs,
+                         limit=len(svs)*2)
+        if err / norm > 1e-4:
+            print("Warning: large error in posterior normalization")
+
+        normd_post_vals[:, i] = un_p_vals / norm
 
     sv_col = np.repeat(svs, m_dms.size)
     m_dm_col = np.tile(m_dms, svs.size)
     normd_post_vals_col = normd_post_vals.flatten()
-    np.savetxt("{}normalized_posterior_sv_M={:.1f}_N={}.csv".format(post_sv_dir, m_pbh, n_pbh),
+    np.savetxt(("{}normalized_posterior_sv_M={:.1f}_N={}_prior_rate={}_" +
+                "prior_lambda={}_prior_sv={}.csv").format(post_sv_dir, m_pbh, n_pbh, merger_rate_prior, lambda_prior, sv_prior),
                np.stack([sv_col, m_dm_col, normd_post_vals_col]).T,
                header=("Normalized posterior for <sigma v>.\n"
                        "Columns: <sigma v> (cm^3/s), m_DM (GeV), posterior."))
 
 
-def load_posterior(m_pbh, n_pbh, normalized=False):
+def load_posterior(m_pbh, n_pbh, merger_rate_prior, lambda_prior, sv_prior, normalized=False):
     """Loads a table of posterior values for <sigma v>.
 
     Returns
@@ -355,39 +356,31 @@ def load_posterior(m_pbh, n_pbh, normalized=False):
     else:
         prefix = ""
     sv_col, m_dm_col, post_col = np.loadtxt(
-        "{}{}posterior_sv_M={:.1f}_N={}.csv".format(post_sv_dir, prefix, m_pbh, n_pbh)).T
+        "{}{}posterior_sv_M={:.1f}_N={}_prior_rate={}_prior_lambda={}_prior_sv={}.csv".format(
+            post_sv_dir, prefix, m_pbh, n_pbh, merger_rate_prior, lambda_prior, sv_prior)).T
     svs = np.unique(sv_col)
     m_dms = np.unique(m_dm_col)
     post_vals = post_col.reshape([svs.size, m_dms.size])
     return svs, m_dms, post_vals
 
 
-def credible_interval(posterior, alpha, x_max, x_guess):
-    """Computes the credible interval for p(x). At the level alpha, this is
-    [0, x_alpha], where
-        int_0^{x_alpha} dx p(x) = alpha.
-
-    Parameters
-    ----------
-    posterior : float -> float
-    alpha : float
-        Level of the interval.
-    x_max : float
-        Largest possible value for x.
-    x_guess : float
-        Point at which to start the root finder.
+def post_sv_ci(svs, post_vals, alpha=0.95):
+    """Computes the credible interval for p(<sigma v>). At the level alpha,
+    this is [0, <sigma v>_alpha], where
+        int_0^{<sigma v>_alpha} d<sigma v> p(<sigma v>) = alpha.
 
     Returns
     -------
-    x_alpha : float
+    sv_alpha : float
     """
-    def objective(x):
-        return quad(posterior, 0, x, epsabs=1e-99, epsrel=1e-4, limit=200)[0] - alpha
+    cdf = interp1d(svs[1:], cumtrapz(post_vals, svs))
+    sol = root_scalar(lambda log10_sv: cdf(10**log10_sv) - alpha, bracket=list(np.log10(svs[[1, -1]])))
+    if not sol.converged:
+        print("Warning: root_scalar did not converge")
+    return 10**sol.root
 
-    return root_scalar(objective, bracket=[0, x_max], x0=x_guess, xtol=1e-200).root
 
-
-def save_sv_bounds(m_pbh, n_pbh, alpha=0.95):
+def save_sv_bounds(m_pbh, n_pbh, merger_rate_prior, lambda_prior, sv_prior, alpha=0.95):
     """Computes and saves bounds on <sigma v>.
 
     Returns
@@ -397,25 +390,18 @@ def save_sv_bounds(m_pbh, n_pbh, alpha=0.95):
         for the given PBH mass and number. Saves these bounds to the
         data/bounds/ directory.
     """
-    svs, m_dms, post_vals = load_posterior(m_pbh, n_pbh, normalized=True)
+    svs, m_dms, post_vals = load_posterior(m_pbh, n_pbh, merger_rate_prior,
+                                           lambda_prior, sv_prior, normalized=True)
     sv_mg, m_dm_mg = np.meshgrid(svs, m_dms)
-    sv_bounds = []
+    sv_bounds = np.zeros_like(m_dms)
 
-    for i, m_dm in enumerate(m_dms):
-        # Construct interpolator up to value of <sigma v> where posterior is 0
-        post_zero_idx = np.where(post_vals[i] == 0)[0][0] + 1
-        svs_range = svs[:post_zero_idx]
+    for i, (m_dm, pvs) in enumerate(zip(m_dms, post_vals.T)):
+        sv_bounds[i] = post_sv_ci(svs, pvs)
 
-        posterior = interp1d(svs_range, post_vals[i, :post_zero_idx],
-                             bounds_error=None, fill_value="extrapolate")
+    np.savetxt(
+        ("data/bounds/sv_bounds_M={:.1f}f_N={}_prior_rate={}_prior_lambda={}_prior_sv={}.csv").format(
+             m_pbh, n_pbh, merger_rate_prior, lambda_prior, sv_prior),
+        np.stack([m_dms, sv_bounds]).T,
+        header="{}% CI bounds on <sigma v>.\nColumns: m_DM (GeV), <sigma v> (cm^3/s).".format(100*alpha))
 
-        # Compute <sigma v> bound
-        sv_bounds.append(credible_interval(posterior, alpha, x_max=svs_range[-1], x_guess=1e-35))
-
-    sv_bounds = np.array(sv_bounds)
-
-    np.savetxt("data/bounds/sv_bounds_M={:.1}f_N={}.csv".format(m_pbh, n_pbh),
-               np.stack([m_dms, sv_bounds]).T,
-               header="{}% CI bounds on <sigma v>.\nColumns: m_DM (GeV), <sigma v> (cm^3/s).".format(100*alpha))
-
-    return sv_bounds
+    return m_dms, sv_bounds
