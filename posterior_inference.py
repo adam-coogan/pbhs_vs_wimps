@@ -256,7 +256,8 @@ def _get_f_samples(fs, integrand_vals, frac=0.1, n=10):
 
 @np.vectorize
 def get_posterior_val(sv, n_pbh, p_f, p_gamma, m_pbh, m_dm, n_u,
-                      merger_rate_prior, lambda_prior, sv_prior):
+                      merger_rate_prior, lambda_prior, sv_prior,
+                      method="quad"):
     """Computes the posterior for <sigma v>. Supports broadcasting over sv and
     m_dm. See documentation for `posterior_integrand`.
     """
@@ -267,11 +268,18 @@ def get_posterior_val(sv, n_pbh, p_f, p_gamma, m_pbh, m_dm, n_u,
                                        m_pbh, m_dm, n_u, merger_rate_prior,
                                        lambda_prior, sv_prior)
 
-        # Make sure quad samples near the integrand's peak
-        fs = np.logspace(log10_f_min, log10_f_max, 100)
-        points_f = _get_f_samples(fs, integrand(fs))
-
-        post_val += quad(integrand, f_min, f_max, points=points_f, epsabs=1e-99)[0]
+        if method == "quad":
+            # Make sure quad samples near the integrand's peak
+            fs = np.logspace(log10_f_min, log10_f_max, 100)
+            points_f = _get_f_samples(fs, integrand(fs))
+            post_val += quad(
+                integrand, f_min, f_max, points=points_f, epsabs=1e-99)[0]
+        elif method == "trapz":
+            # Faster but potentially inaccurate
+            fs = np.logspace(log10_f_min, log10_f_max, 300)
+            post_val += trapz(integrand(fs), fs)
+        else:
+            raise ValueError("Invalid integration method")
 
     return post_val
 
@@ -306,32 +314,43 @@ def save_posterior_table(svs, n_pbh, p_f, p_gamma, m_pbh, m_dms, n_u,
                        "Columns are: <sigma v> (cm^3/s), m_DM (GeV), p(sv | ...).").format(m_pbh))
 
 
-def save_normalized_posterior_table(m_pbh, n_pbh, merger_rate_prior, lambda_prior, sv_prior):
+def save_normalized_posterior_table(m_pbh, n_pbh, merger_rate_prior,
+                                    lambda_prior, sv_prior, method="quad"):
     """Converts an existing unnormalized posterior table into a normalized
     posterior table. Does not check if the posterior already exists."""
-    svs, m_dms, unnormd_post_vals = load_posterior(m_pbh, n_pbh, merger_rate_prior, lambda_prior, sv_prior)
+    svs, m_dms, unnormd_post_vals = load_posterior(
+        m_pbh, n_pbh, merger_rate_prior, lambda_prior, sv_prior)
     normd_post_vals = unnormd_post_vals.copy()
-    #svs_dense = np.logspace(np.log10(svs[0]), np.log10(svs[-1]), 100)
 
     for i, (m_dm, un_p_vals) in enumerate(zip(m_dms, unnormd_post_vals.T)):
         # Construct interpolator up to value of <sigma v> where posterior is 0
-        unnormd_posterior = interp1d(svs, un_p_vals, bounds_error=None, fill_value="extrapolate")
-        # norm = trapz(unnormd_posterior(svs_dense), svs_dense)
-        norm, err = quad(unnormd_posterior, 0, svs[-1], epsabs=0, points=svs,
-                         limit=len(svs)*2)
-        if err / norm > 1e-4:
-            print("Warning: large error in posterior normalization")
+        unnormd_posterior = interp1d(svs, un_p_vals, bounds_error=None,
+                                     fill_value="extrapolate")
+        if method == "quad":
+            normalization, err = quad(unnormd_posterior, 0, svs[-1], epsabs=0,
+                                      points=svs, limit=len(svs)*2)
+            if err / normalization > 1e-4:
+                print("Warning: large error in posterior normalization")
+        elif method == "trapz":
+            # Faster but potentially inaccurate
+            svs_dense = np.logspace(np.log10(svs[0]), np.log10(svs[-1]), 3000)
+            normalization = trapz(unnormd_posterior(svs_dense), svs_dense)
+        else:
+            raise ValueError("Invalid integration method")
 
-        normd_post_vals[:, i] = un_p_vals / norm
+        normd_post_vals[:, i] = un_p_vals / normalization
 
     sv_col = np.repeat(svs, m_dms.size)
     m_dm_col = np.tile(m_dms, svs.size)
     normd_post_vals_col = normd_post_vals.flatten()
-    np.savetxt(("{}normalized_posterior_sv_M={:.1f}_N={}_prior_rate={}_" +
-                "prior_lambda={}_prior_sv={}.csv").format(post_sv_dir, m_pbh, n_pbh, merger_rate_prior, lambda_prior, sv_prior),
-               np.stack([sv_col, m_dm_col, normd_post_vals_col]).T,
-               header=("Normalized posterior for <sigma v>.\n"
-                       "Columns: <sigma v> (cm^3/s), m_DM (GeV), posterior."))
+    np.savetxt(
+        ("{}normalized_posterior_sv_M={:.1f}_N={}_prior_rate={}_" +
+         "prior_lambda={}_prior_sv={}.csv").format(post_sv_dir, m_pbh, n_pbh,
+                                                   merger_rate_prior,
+                                                   lambda_prior, sv_prior),
+        np.stack([sv_col, m_dm_col, normd_post_vals_col]).T,
+        header=("Normalized posterior for <sigma v>.\n"
+                "Columns: <sigma v> (cm^3/s), m_DM (GeV), posterior."))
 
 
 def load_posterior(m_pbh, n_pbh, merger_rate_prior, lambda_prior, sv_prior, normalized=False):
