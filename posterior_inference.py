@@ -12,7 +12,7 @@ post_f_dir = "data/posteriors_f/"
 post_sv_dir = "data/posteriors_sv/"
 p_gamma_dir = "data/p_gammas/"
 ligo_masses = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
-# f range used by Bradley
+# f range used by Jung B
 log10_f_min, log10_f_max = -6, 0
 f_min, f_max = 1e-6, 1
 
@@ -33,7 +33,15 @@ def load_p_f_gw(m_pbh, n_pbh, post_f_dir=post_f_dir, prior="LF"):
     -------
     p_f : float, int -> float
     """
-    experiment = "ET" if m_pbh == 10 else "O3"
+
+    if (m_pbh == 10):
+        experiment = "ET"
+    elif (m_pbh == 100):
+        experiment = "SKA"
+    else:
+        experiment = "O3"
+
+    #experiment = "ET" if m_pbh == 10 else "O3"
     if prior not in ["LF", "J"]:
         raise ValueError("Invalid merger rate prior")
 
