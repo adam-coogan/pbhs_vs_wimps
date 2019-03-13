@@ -1,12 +1,14 @@
 import numbers
 import numpy as np
 from scipy.special import gammainc
+from scipy.optimize import root_scalar
 
-from constants import gamma_tr_sample
+from constants import gamma_tr_sample, GeV_to_erg, pbh_ann_rate
 from constants import r_s_mw, alpha_mw, n_mw_pbhs, d_earth, to_galactic_coords
 from constants import int_dnde_interps, int_e_dnde_interps
 from constants import kpc_to_cm, yr_to_s, age_of_universe, h_hubble
 from constants import fs_0, n_u_0, flux_type_0, flux_thresh_0, b_cut_0
+
 
 class PBHHaloSim(object):
     """Class for performing Monte Carlo analysis of detectability of PBHs
@@ -17,32 +19,42 @@ class PBHHaloSim(object):
         """Returns list of valid DM annihilation final states."""
         return ["e", "c", "b", "t", "W", "Z", "g", "h"]
 
-    def __init__(self, mass_dist, f_pbh, m_dm=100, sv=3e-26, fs=fs_0,
-                 flux_type=flux_type_0, b_cut=b_cut_0,
-                 flux_thresh=flux_thresh_0, n_samples=1000):
+    def __init__(self,
+                 mass_dist,
+                 f_pbh,
+                 m_dm=100,
+                 sv=3e-26,
+                 fs=fs_0,
+                 flux_type=flux_type_0,
+                 b_cut=b_cut_0,
+                 flux_thresh=flux_thresh_0,
+                 n_samples=1000):
         """
         Parameters
         ----------
         mass_dist : float -> np.array or float
-            Function to sample from PBH mass distribution. Pass a float to indicate
-            a monochromatic mass distribution at the indicated value in M_sun.
+            Function to sample from PBH mass distribution. Pass a float to
+            indicate a monochromatic mass distribution at the indicated value
+            in M_sun.
         f_pbh : float
             Omega_PBH / Omega_CDM.
         m_dm : float
             Dark matter mass, GeV
         sv : float
-            Dark matter thermally-averaged self-annihilation cross section, cm^3/s.
+            Dark matter thermally-averaged self-annihilation cross section,
+            cm^3/s.
         fs : string
             Annihilation final state.
         flux_type : string
             Use "dnde" to compute fluxes or "e dnde" to compute energy fluxes.
         b_cut : float
-            Specifies the latitude cut for calculating the number of detectable PBH
-            halos.
+            Specifies the latitude cut for calculating the number of detectable
+            PBH halos.
         flux_thresh : float
-            Flux detectability threshold in cm^-2 s^-1 (for `flux_type` "dnde") or
-            erg cm^-2 s^-1 (for `flux_type` "e dnde"). Defaults to the conservative
-            threshold for the energy flux above 1 GeV from arXiv:1601.06781.
+            Flux detectability threshold in cm^-2 s^-1 (for `flux_type` "dnde")
+            or erg cm^-2 s^-1 (for `flux_type` "e dnde"). Defaults to the
+            conservative threshold for the energy flux above 1 GeV from
+            arXiv:1601.06781.
         n_samples : int
             Number of iterations of the simulation to run.
         """
@@ -100,10 +112,7 @@ class PBHHaloSim(object):
         -------
         UCMH annihilation rate in 1/s.
         """
-        rho_max = self.m_dm / (self.sv * age_of_universe * yr_to_s)
-        r_cut = h_hubble * 1.3e-7 * (100./self.m_dm * self.sv/3e-26)**(4/9) * (self.m_pbhs/1.)**(1/3)
-        # Added missing factor of 1/2
-        self.ann_rates = (4*np.pi*self.sv*rho_max**2 * (kpc_to_cm*r_cut)**3 / (2*self.m_dm**2))
+        self.ann_rates = pbh_ann_rate(self.m_dm, self.sv, self.m_pbhs)
         return self.ann_rates
 
     def _get_angular_dist_bounds(self, efficient_angular_sampling=True):
@@ -111,10 +120,11 @@ class PBHHaloSim(object):
 
         Notes
         -----
-        This function first computes the maximum distance from Earth at which each
-        PBH could be detected. It then finds the extent in each direction for the bounding
-        (lat, lon) rectangle, and computes the corresponding correction to the detection
-        probability.
+        This function first computes the maximum distance from Earth at which
+        each PBH could be detected. It then finds the extent in each direction
+        for the bounding (lat, lon) rectangle, and computes the corresponding
+        correction to the detection probability.
+
         Must be called after `_sample_pbh_masses()` and `_ann_rates()` and
         before `_sample_positions()`!
         """
@@ -122,12 +132,15 @@ class PBHHaloSim(object):
             self._max_detectable_distances()
             # Bounds on sine of latitude from galactic plane
             self.slat_ms = np.ones(self.n_samples)
-            self.slat_ms[self.d_ms < d_earth] = self.d_ms[self.d_ms < d_earth] / d_earth
+            self.slat_ms[self.d_ms < d_earth] = (
+                self.d_ms[self.d_ms < d_earth] / d_earth)
             # Longitude bounds
             self.phi_ms = np.pi * np.ones(self.n_samples)
-            self.phi_ms[self.d_ms < d_earth] = (np.arcsin(self.d_ms[self.d_ms < d_earth] / d_earth))
+            self.phi_ms[self.d_ms < d_earth] = (np.arcsin(
+                self.d_ms[self.d_ms < d_earth] / d_earth))
             # Determine correction for probabilities
-            self.pr_sampling_correction *= 4*self.slat_ms * self.phi_ms / (4*np.pi)
+            self.pr_sampling_correction *= (4*self.slat_ms * self.phi_ms /
+                                            (4*np.pi))
 
     def _max_detectable_distances(self):
         """Compute max distance from Earth at which PBHs with sampled masses
@@ -141,7 +154,8 @@ class PBHHaloSim(object):
 
         Notes
         -----
-        Makes use of the factor that the PDF for x = r^alpha is Gamma(shape, scale).
+        Makes use of the factor that the PDF for x = r^alpha is Gamma(shape,
+        scale).
         """
         return np.random.gamma(shape=self._x_shape,
                                scale=self._x_scale,
@@ -203,7 +217,8 @@ class PBHHaloSim(object):
         Energy fluxes if erg / cm^2 / s if flux_type is "e dnde". Fluxes in
         1 / cm^2 / s if flux_type is "e dnde".
         """
-        self.fluxes = self._flux_helper(self.ann_rates, self.flux_fact, self.positions[0])
+        self.fluxes = self._flux_helper(self.ann_rates, self.flux_fact,
+                                        self.positions[0])
         return self.fluxes
 
     def _pr_det(self):
@@ -222,7 +237,8 @@ class PBHHaloSim(object):
         # Probability for a PBH in the MW halo to pass all cuts
         self.pr_det = np.mean(self.detectable)
         # 95% confidence interval
-        self.pr_det_err = 1.96 * np.std(self.detectable) / np.sqrt(self.n_samples)
+        self.pr_det_err = (1.96 * np.std(self.detectable) /
+                           np.sqrt(self.n_samples))
 
         return self.pr_det, self.pr_det_err
 
@@ -234,7 +250,9 @@ class PBHHaloSim(object):
 
         return self.n_det, self.n_det_err
 
-    def run(self, efficient_angular_sampling=True, truncate_radial_samples=True):
+    def run(self,
+            efficient_angular_sampling=True,
+            truncate_radial_samples=True):
         """Runs the simulation.
 
         Notes
@@ -252,3 +270,19 @@ class PBHHaloSim(object):
         self._fluxes()
         self._pr_det()
         self._n_det_expected()
+
+
+@np.vectorize
+def sv_bound_pt(m_dm, m_pbh, f):
+    """Computes a quick-and-dirty bound on <sigma v> by requiring the
+    number of PBHs passing the |b| and Phi cuts to be less than the number
+    of unassociated point sources.
+    """
+    def objective(log10_sv):
+        sim = PBHHaloSim(m_pbh, f, m_dm, 10**log10_sv, n_samples=10000)
+        sim.run()
+        return sim.n_det - n_u_0
+
+    sol = root_scalar(objective, bracket=[-45, -20], maxiter=20)
+    assert sol.converged
+    return 10**sol.root
