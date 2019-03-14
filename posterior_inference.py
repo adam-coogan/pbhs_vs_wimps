@@ -1,10 +1,10 @@
 import numpy as np
 from constants import fs_0, flux_type_0, flux_thresh_0, b_cut_0
 from constants import n_mw_pbhs
-from scipy.integrate import quad, dblquad, trapz, cumtrapz
+from scipy.integrate import quad, trapz, cumtrapz
 from scipy.interpolate import interp1d, RegularGridInterpolator
-from scipy.optimize import root_scalar, minimize_scalar
-from scipy.stats import binom, norm, poisson
+from scipy.optimize import root_scalar
+from scipy.stats import binom
 from scipy import special
 from pbhhalosim import PBHHaloSim
 
@@ -41,16 +41,18 @@ def load_p_f_gw(m_pbh, n_pbh, post_f_dir=post_f_dir, prior="LF"):
     else:
         experiment = "O3"
 
-    #experiment = "ET" if m_pbh == 10 else "O3"
+    # experiment = "ET" if m_pbh == 10 else "O3"
     if prior not in ["LF", "J"]:
         raise ValueError("Invalid merger rate prior")
 
-    fs, p_fs = np.loadtxt(
-        "{}Posterior_f_{}_Prior_{}_M={:.1f}_N={}.txt".format(post_f_dir, experiment, prior, m_pbh, n_pbh)).T
+    fs, p_fs = np.loadtxt("{}Posterior_f_{}_Prior_{}_M={:.1f}_N={}.txt".format(
+        post_f_dir, experiment, prior, m_pbh, n_pbh)).T
 
     def p_f(f, cur_prior):  # ugly
         if cur_prior != prior:
-            raise ValueError("Calling p_f with the prior '{}', but it was loaded with '{}'".format(cur_prior, prior))
+            raise ValueError(
+                "Calling p_f with the prior '{}', but it was loaded with '{}'".
+                format(cur_prior, prior))
         else:
             return np.interp(f, fs, p_fs, left=0, right=0)
 
@@ -76,8 +78,14 @@ def p_sv(sv, prior="U"):
 
 
 @np.vectorize
-def get_p_gamma_val(m_pbh, m_dm, sv, fs=fs_0, flux_type=flux_type_0, b_cut=b_cut_0,
-                    flux_thresh=flux_thresh_0, n_samples=50000):
+def get_p_gamma_val(m_pbh,
+                    m_dm,
+                    sv,
+                    fs=fs_0,
+                    flux_type=flux_type_0,
+                    b_cut=b_cut_0,
+                    flux_thresh=flux_thresh_0,
+                    n_samples=50000):
     """Computes p_gamma, the probability that a PBH
     passes the Fermi point source selection cuts.
 
@@ -92,8 +100,14 @@ def get_p_gamma_val(m_pbh, m_dm, sv, fs=fs_0, flux_type=flux_type_0, b_cut=b_cut
     return sim.pr_det, sim.pr_det_err
 
 
-def save_p_gamma_table(m_pbh, m_dms, svs, fs=fs_0, flux_type=flux_type_0, b_cut=b_cut_0,
-                       flux_thresh=flux_thresh_0, n_samples=50000):
+def save_p_gamma_table(m_pbh,
+                       m_dms,
+                       svs,
+                       fs=fs_0,
+                       flux_type=flux_type_0,
+                       b_cut=b_cut_0,
+                       flux_thresh=flux_thresh_0,
+                       n_samples=50000):
     """Generates a table containing p_gamma.
 
     Parameters
@@ -184,7 +198,8 @@ def p_n_gamma(n_gamma, sv, f, p_gamma, m_pbh, m_dm):
         function of m_DM and <sigma v>.
     m_pbh : float
     """
-    return binom.pmf(n_gamma, n=np.floor(n_mw_pbhs(f, m_pbh)), p=p_gamma(sv, m_dm))
+    return binom.pmf(
+        n_gamma, n=np.floor(n_mw_pbhs(f, m_pbh)), p=p_gamma(sv, m_dm))
 
 
 @np.vectorize
@@ -245,49 +260,96 @@ def _get_f_samples(fs, integrand_vals, frac=0.1, n=10):
     Array of log-spaced values of f out to where the integrand decreases to
     10% of its maximum value, and the f at which it attains its maximum value.
     """
-    integrand_max = integrand_vals.max()
+    integrand_max = integrand_vals.max(axis=0)
     # Choose some fraction of the max value to sample out to
     min_sample_val = frac * integrand_max
-    d = np.sign(min_sample_val - integrand_vals[:-1]) - np.sign(min_sample_val - integrand_vals[1:])
+    d = (np.sign(min_sample_val - integrand_vals[:-1]) -
+         np.sign(min_sample_val - integrand_vals[1:]))
     try:
         f_low = fs[max(0, np.where(d > 0)[0][0])]
-    except:
+    except IndexError:
         f_low = fs[0]
     try:
         f_high = fs[min(len(fs)-1, np.where(d < 0)[0][-1])]
-    except:
+    except IndexError:
         f_high = fs[-1]
 
-    return np.append(np.logspace(np.log10(f_low), np.log10(f_high), n),
-                     fs[np.argmax(integrand_vals)])
+    return np.append(np.logspace(np.log10(f_low), np.log10(f_high), n-1),
+                     fs[np.argmax(integrand_vals, axis=0)])
+
+
+def _get_trapz_f_samples(fs, integrand_vals, frac=0.1, n_low=50, n_peak=225,
+                         n_high=125):
+    integrand_max = integrand_vals.max(axis=0)
+    min_sample_val = 0.1 * integrand_max
+    d = (np.sign(min_sample_val - integrand_vals[:-1]) -
+         np.sign(min_sample_val - integrand_vals[1:]))
+
+    # Select the peak of the integrand
+    f_low = fs[np.argmax(d > 0, axis=0)]
+    idx_high = np.argmax(d < 0, axis=0)
+    idx_high[idx_high == 0] = -1
+    f_high = fs[idx_high]
+
+    # Sample around peak
+    f_samples = np.zeros([n_low + n_peak + n_high, integrand_vals.shape[1]])
+    for i in range(integrand_vals.shape[1]):
+        n_peak_cur = n_peak
+        f_samples_low = np.array([])
+        f_samples_high = np.array([])
+        if f_low[i] == fs[0]:  # peak is flux against fs[0]
+            n_peak_cur += n_low
+        else:
+            f_samples_low = np.geomspace(fs[0], f_low[i], n_low)
+        if f_high[i] == fs[-1]:  # peak is flux against fs[-1]
+            n_peak_cur += n_high
+        else:
+            f_samples_high = np.geomspace(f_high[i], fs[-1], n_high)
+        f_samples_peak = np.geomspace(f_low[i], f_high[i], n_peak_cur)
+        f_samples[:, i] = np.concatenate(
+            [f_samples_low, f_samples_peak, f_samples_high])
+
+    return f_samples
 
 
 @np.vectorize
 def get_posterior_val(sv, n_pbh, p_f, p_gamma, m_pbh, m_dm, n_u,
                       merger_rate_prior, lambda_prior, sv_prior,
-                      method="quad"):
+                      method="trapz"):
     """Computes the posterior for <sigma v>. Supports broadcasting over sv and
     m_dm. See documentation for `posterior_integrand`.
     """
     post_val = 0
-    for n_gamma in np.arange(0, n_u+1, 1):
-        def integrand(f):
-            return posterior_integrand(sv, n_gamma, f, n_pbh, p_f, p_gamma,
-                                       m_pbh, m_dm, n_u, merger_rate_prior,
-                                       lambda_prior, sv_prior)
+    if method == "quad":
+        for n_gamma in np.arange(0, n_u+1, 1):
+            def integrand(f):
+                return posterior_integrand(sv, n_gamma, f, n_pbh, p_f, p_gamma,
+                                           m_pbh, m_dm, n_u, merger_rate_prior,
+                                           lambda_prior, sv_prior)
 
-        if method == "quad":
             # Make sure quad samples near the integrand's peak
             fs = np.logspace(log10_f_min, log10_f_max, 100)
             points_f = _get_f_samples(fs, integrand(fs))
             post_val += quad(
                 integrand, f_min, f_max, points=points_f, epsabs=1e-99)[0]
-        elif method == "trapz":
-            # Faster but potentially inaccurate
-            fs = np.logspace(log10_f_min, log10_f_max, 300)
-            post_val += trapz(integrand(fs), fs)
-        else:
-            raise ValueError("Invalid integration method")
+    elif method == "trapz":
+        # Compute integrand values over an initial grid
+        fs_init = np.logspace(log10_f_min, log10_f_max, 100)
+        n_gs = np.arange(0, n_u + 1)
+        n_g_mg_init, f_mg_init = np.meshgrid(n_gs, fs_init)
+        integrand_vals_init = posterior_integrand(
+            sv, n_g_mg_init, f_mg_init, n_pbh, p_f, p_gamma, m_pbh, m_dm, n_u,
+            merger_rate_prior, lambda_prior, sv_prior)
+        # Refine the grid
+        f_mg = _get_trapz_f_samples(fs_init, integrand_vals_init)
+        n_g_mg = n_gs * np.ones_like(f_mg)
+        integrand_vals = posterior_integrand(
+            sv, n_g_mg, f_mg, n_pbh, p_f, p_gamma, m_pbh, m_dm, n_u,
+            merger_rate_prior, lambda_prior, sv_prior)
+
+        return trapz(integrand_vals, f_mg, axis=0).sum()
+    else:
+        raise ValueError("Invalid integration method")
 
     return post_val
 
@@ -315,11 +377,16 @@ def save_posterior_table(svs, n_pbh, p_f, p_gamma, m_pbh, m_dms, n_u,
                                   n_u, merger_rate_prior, lambda_prior,
                                   sv_prior)
     # Save the data table
-    post_path = "{}posterior_sv_M={:.1f}_N={}_prior_rate={}_prior_lambda={}_prior_sv={}.csv".format(post_sv_dir, m_pbh, n_pbh, merger_rate_prior, lambda_prior, sv_prior)
+    post_path = ("{}posterior_sv_M={:.1f}_N={}_prior_rate={}_" +
+                 "prior_lambda={}_prior_sv={}.csv").format(
+                     post_sv_dir, m_pbh, n_pbh, merger_rate_prior,
+                     lambda_prior, sv_prior)
     post_tab = np.stack([sv_col, m_dm_col, post_vals]).T
     np.savetxt(post_path, post_tab,
-               header=("p(<sigma v> | N_PBH, M_PBH, m_DM, U) for M_PBH = {:.1f} M_sun.\n"
-                       "Columns are: <sigma v> (cm^3/s), m_DM (GeV), p(sv | ...).").format(m_pbh))
+               header=("p(<sigma v> | N_PBH, M_PBH, m_DM, U) for"
+                       " M_PBH = {:.1f} M_sun.\n"
+                       "Columns are: <sigma v> (cm^3/s), m_DM (GeV), "
+                       "p(sv | ...).").format(m_pbh))
 
 
 def save_normalized_posterior_table(m_pbh, n_pbh, merger_rate_prior,
@@ -361,7 +428,12 @@ def save_normalized_posterior_table(m_pbh, n_pbh, merger_rate_prior,
                 "Columns: <sigma v> (cm^3/s), m_DM (GeV), posterior."))
 
 
-def load_posterior(m_pbh, n_pbh, merger_rate_prior, lambda_prior, sv_prior, normalized=False):
+def load_posterior(m_pbh,
+                   n_pbh,
+                   merger_rate_prior,
+                   lambda_prior,
+                   sv_prior,
+                   normalized=False):
     """Loads a table of posterior values for <sigma v>.
 
     Returns
@@ -375,8 +447,10 @@ def load_posterior(m_pbh, n_pbh, merger_rate_prior, lambda_prior, sv_prior, norm
     else:
         prefix = ""
     sv_col, m_dm_col, post_col = np.loadtxt(
-        "{}{}posterior_sv_M={:.1f}_N={}_prior_rate={}_prior_lambda={}_prior_sv={}.csv".format(
-            post_sv_dir, prefix, m_pbh, n_pbh, merger_rate_prior, lambda_prior, sv_prior)).T
+        ("{}{}posterior_sv_M={:.1f}_N={}_prior_rate={}_" +
+         "prior_lambda={}_prior_sv={}.csv").format(post_sv_dir, prefix, m_pbh,
+                                                   n_pbh, merger_rate_prior,
+                                                   lambda_prior, sv_prior)).T
     svs = np.unique(sv_col)
     m_dms = np.unique(m_dm_col)
     post_vals = post_col.reshape([svs.size, m_dms.size])
@@ -393,13 +467,20 @@ def post_sv_ci(svs, post_vals, alpha=0.95):
     sv_alpha : float
     """
     cdf = interp1d(svs[1:], cumtrapz(post_vals, svs))
-    sol = root_scalar(lambda log10_sv: cdf(10**log10_sv) - alpha, bracket=list(np.log10(svs[[1, -1]])))
+    sol = root_scalar(
+        lambda log10_sv: cdf(10**log10_sv) - alpha,
+        bracket=list(np.log10(svs[[1, -1]])))
     if not sol.converged:
         print("Warning: root_scalar did not converge")
     return 10**sol.root
 
 
-def save_sv_bounds(m_pbh, n_pbh, merger_rate_prior, lambda_prior, sv_prior, alpha=0.95):
+def save_sv_bounds(m_pbh,
+                   n_pbh,
+                   merger_rate_prior,
+                   lambda_prior,
+                   sv_prior,
+                   alpha=0.95):
     """Computes and saves bounds on <sigma v>.
 
     Returns
@@ -409,8 +490,13 @@ def save_sv_bounds(m_pbh, n_pbh, merger_rate_prior, lambda_prior, sv_prior, alph
         for the given PBH mass and number. Saves these bounds to the
         data/bounds/ directory.
     """
-    svs, m_dms, post_vals = load_posterior(m_pbh, n_pbh, merger_rate_prior,
-                                           lambda_prior, sv_prior, normalized=True)
+    svs, m_dms, post_vals = load_posterior(
+        m_pbh,
+        n_pbh,
+        merger_rate_prior,
+        lambda_prior,
+        sv_prior,
+        normalized=True)
     sv_mg, m_dm_mg = np.meshgrid(svs, m_dms)
     sv_bounds = np.zeros_like(m_dms)
 
@@ -418,9 +504,11 @@ def save_sv_bounds(m_pbh, n_pbh, merger_rate_prior, lambda_prior, sv_prior, alph
         sv_bounds[i] = post_sv_ci(svs, pvs)
 
     np.savetxt(
-        ("data/bounds/sv_bounds_M={:.1f}f_N={}_prior_rate={}_prior_lambda={}_prior_sv={}.csv").format(
+        ("data/bounds/sv_bounds_M={:.1f}f_N={}_prior_rate={}_"
+         "prior_lambda={}_prior_sv={}.csv").format(
              m_pbh, n_pbh, merger_rate_prior, lambda_prior, sv_prior),
         np.stack([m_dms, sv_bounds]).T,
-        header="{}% CI bounds on <sigma v>.\nColumns: m_DM (GeV), <sigma v> (cm^3/s).".format(100*alpha))
+        header=("{}% CI bounds on <sigma v>.\nColumns: "
+                "m_DM (GeV), <sigma v> (cm^3/s).").format(100 * alpha))
 
     return m_dms, sv_bounds
