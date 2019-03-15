@@ -5,8 +5,7 @@ from scipy.optimize import root_scalar
 
 from constants import gamma_tr_sample, GeV_to_erg, pbh_ann_rate
 from constants import r_s_mw, alpha_mw, n_mw_pbhs, d_earth, to_galactic_coords
-from constants import int_dnde_interps, int_e_dnde_interps
-from constants import kpc_to_cm, yr_to_s, age_of_universe, h_hubble
+from constants import int_dnde_interps, int_e_dnde_interps, kpc_to_cm
 from constants import fs_0, n_u_0, flux_type_0, flux_thresh_0, b_cut_0
 
 
