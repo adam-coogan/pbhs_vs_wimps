@@ -1,8 +1,9 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy import integrate
+from scipy.integrate import quad, trapz, cumtrapz
 from scipy import stats
 from scipy.interpolate import interp1d, interp2d
+from scipy.optimize import root_scalar
 
 """
 Constants and utility functions.
@@ -129,8 +130,8 @@ def load_int_spec_interps(e_low=1, e_high=None):
             es = es[e_idxs]
             dnde = dnde[e_idxs]
             # Compute integrals
-            int_dndes.append(integrate.trapz(dnde, es))
-            int_e_dndes.append(integrate.trapz(es*dnde, es))
+            int_dndes.append(trapz(dnde, es))
+            int_e_dndes.append(trapz(es*dnde, es))
 
         int_dndes = np.array(int_dndes)
         int_e_dndes = np.array(int_e_dndes)
@@ -174,12 +175,9 @@ def rho_einasto(r, rho_e=rho_e_mw, r_s=r_s_mw, alpha=alpha_mw):
 
 
 # Total MW DM mass in M_sun. Cross-checked with PPPC.
-m_mw_dm = integrate.quad(
+m_mw_dm = quad(
     lambda r: 4 * np.pi * r**2 * rho_einasto(r, rho_e_mw, r_s_mw, alpha_mw),
-    0.,
-    np.inf,
-    epsabs=0,
-    epsrel=1e-4)[0]
+    0., np.inf, epsabs=0, epsrel=1e-4)[0]
 
 
 def n_mw_pbhs(f, m_pbh):
@@ -297,3 +295,21 @@ def sci_fmt(val):
         else:
             m_str = "{:g}".format(m)
             return (r"{" + m_str + r"} \times 10^{" + e_str + "}")
+
+
+def post_sv_ci(svs, post_vals, alpha=0.95):
+    """Computes the credible interval for p(<sigma v>). At the level alpha,
+    this is [0, <sigma v>_alpha], where
+        int_0^{<sigma v>_alpha} d<sigma v> p(<sigma v>) = alpha.
+
+    Returns
+    -------
+    sv_alpha : float
+    """
+    cdf = interp1d(svs[1:], cumtrapz(post_vals, svs))
+    sol = root_scalar(
+        lambda log10_sv: cdf(10**log10_sv) - alpha,
+        bracket=list(np.log10(svs[[1, -1]])))
+    if not sol.converged:
+        print("Warning: root_scalar did not converge")
+    return 10**sol.root
