@@ -160,7 +160,7 @@ class Distribution_N_gamma:  # __init__(m_pbh), __call__(n_gamma, sv, f, m_dm)
         sv_col = np.repeat(svs, m_dms.size)
         m_dm_col = np.tile(m_dms, svs.size)
         # Compute the table values
-        p_gammas, p_gamma_errs = self.get_p_gamma_val(m_dm_col, sv_col)
+        p_gammas, p_gamma_errs = self._get_p_gamma_val(m_dm_col, sv_col)
 
         # Save the data table
         np.savetxt(
@@ -171,7 +171,7 @@ class Distribution_N_gamma:  # __init__(m_pbh), __call__(n_gamma, sv, f, m_dm)
                     "Columns are: <sigma v> (cm^3/s), m_DM (GeV), "
                     "p_gamma, MC error.").format(self.m_pbh))
 
-    def _load_p_gamma(self):
+    def _load_p_gamma_table(self):
         """Loads interpolators mapping (m_dm, sv) to p_gamma and its error.
         """
         try:
@@ -212,7 +212,7 @@ class Distribution_N_gamma:  # __init__(m_pbh), __call__(n_gamma, sv, f, m_dm)
         f : float
         """
         if self.p_gamma is None:
-            self._load_p_gamma()
+            self._load_p_gamma_table()
         return binom.pmf(n_gamma, n=np.floor(n_mw_pbhs(f, self.m_pbh)),
                          p=self.p_gamma(sv, m_dm))
 
@@ -331,6 +331,12 @@ class PointSourcePosterior:
         self.sv_prior = sv_prior
 
         self.test = test
+
+    def save_p_gamma_table(self, m_dms, svs):
+        self._p_n_gamma.save_p_gamma_table(m_dms, svs)
+
+    def load_p_gamma_table(self):
+        self._p_n_gamma.load_p_gamma_table()
 
     def integrand(self, f, n_gamma, sv, m_dm):
         """Computes the value of the posterior integrand/summand.
@@ -490,46 +496,29 @@ class PointSourcePosterior:
         if m_dms.size <= 1:
             raise ValueError("m_dms must have more than one element")
 
+        # Compute unnormalized posterior
         sv_col = np.repeat(svs, m_dms.size)
         m_dm_col = np.tile(m_dms, svs.size)
-        post_vals_col = self._get_posterior_val(sv_col, m_dm_col, method)
+        un_post_vals_col = self._get_posterior_val(sv_col, m_dm_col, method)
         np.savetxt(
             "{}{}posterior_sv_{}.csv".format(post_sv_dir,
                                              "test/" if self.test else "",
                                              self.filename_suffix()),
-            np.stack([sv_col, m_dm_col, post_vals_col]).T,
+            np.stack([sv_col, m_dm_col, un_post_vals_col]).T,
             header=self.header())
 
-    def save_normalized_posterior_table(self, method="quad"):
-        """Converts an existing unnormalized posterior table into a normalized
-        posterior table. Does not check if the posterior already exists.
-        """
-        svs, m_dms, unnormd_post_vals = self.load_posterior()
-        normd_post_vals = unnormd_post_vals.copy()
+        # Compute normalized posterior
+        un_post_vals = un_post_vals_col.reshape([svs.size, m_dms.size])
+        n_post_vals = un_post_vals_col.reshape([svs.size, m_dms.size]).copy()
+        for i, (m_dm, un_post) in enumerate(zip(m_dms, un_post_vals.T)):
+            # `quad` will not give any higher accuracy than `trapz`
+            n_post_vals[:, i] = un_post / trapz(un_post, svs)
 
-        for i, (m_dm, un_p_vals) in enumerate(zip(m_dms, unnormd_post_vals.T)):
-            unnormd_posterior = interp1d(svs, un_p_vals, bounds_error=None,
-                                         fill_value="extrapolate")
-            if method == "quad":  # accurate but slow
-                normalization, err = quad(unnormd_posterior, 0, svs[-1],
-                                          epsabs=0, points=svs,
-                                          limit=len(svs)*2)
-                if err / normalization > 1e-4:
-                    print("Warning: large error in posterior normalization")
-            elif method == "trapz":  # faster but less accurate
-                svs_dense = np.geomspace(svs[0], svs[-1], 800)
-                normalization = trapz(unnormd_posterior(svs_dense), svs_dense)
-            else:
-                raise ValueError("Invalid integration method")
-
-            normd_post_vals[:, i] = un_p_vals / normalization
-
-        sv_col = np.repeat(svs, m_dms.size)
-        m_dm_col = np.tile(m_dms, svs.size)
         np.savetxt(
             "{}{}normalized_posterior_sv_{}.csv".format(
-                post_sv_dir, "test/" if self.test else "", self.filename_suffix()),
-            np.stack([sv_col, m_dm_col, normd_post_vals.flatten()]).T,
+                post_sv_dir, "test/" if self.test else "",
+                self.filename_suffix()),
+            np.stack([sv_col, m_dm_col, n_post_vals.flatten()]).T,
             header=self.header())
 
     def sv_bounds(self, alpha=0.95, save=True):
