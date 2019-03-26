@@ -1,107 +1,20 @@
 import numpy as np
 from constants import fs_0, flux_type_0, flux_thresh_0, b_cut_0, n_u_0
-from constants import n_mw_pbhs, post_sv_ci
+from constants import n_mw_pbhs
 from scipy.integrate import quad, trapz
-from scipy.interpolate import interp1d, RegularGridInterpolator
+from scipy.interpolate import RegularGridInterpolator
 from scipy.stats import binom
 from scipy import special
 from pbhhalosim import PBHHaloSim
+from posterior_inference_shared import f_min, f_max, Posterior
 
 
-post_f_dir = "data/posteriors_f/"
-post_sv_dir = "data/posteriors_sv/"
 p_gamma_dir = "data/p_gammas/"
-sv_bounds_dir = "data/bounds/"
-ligo_masses = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
-# f range used by Jung B
-log10_f_min, log10_f_max = -6, 0
-f_min, f_max = 1e-6, 1
 
 
-"""Classes for performing posterior analysis.
-
-Design notes
-------------
-Each probability distribution should be a callable (either a function or a
-class).
-
-Distributions that take a while to compute should save their parameters
-to tables that can easily be loaded. This includes p(f|m_pbh, n_pbh) and
-p(n_gamma|m_dm, sv, m_pbh, f).
-
-If changing a parameter requires time-consuming updates to the distribution's
-parameters, it should be an argument to its initializer. If not, it should be
-an argument to `__call__`.
 """
-
-
-class Distribution_f:  # __init__(m_pbh, n_pbh, merger_rate_prior), __call__(f)
-    """Represents p(f|m_pbh, n_pbh).
-    """
-    def __init__(self, m_pbh, n_pbh, merger_rate_prior):
-        self.m_pbh = m_pbh
-        self.n_pbh = n_pbh
-        self.merger_rate_prior = merger_rate_prior
-
-    def _load_p_f_gw(self):
-        """Loads p(f|m_pbh, n_pbh) for gravitational wave detectors.
-        """
-        if (self.m_pbh == 10):
-            experiment = "ET"
-        elif (self.m_pbh == 100):
-            experiment = "SKA"
-        elif self.m_pbh in ligo_masses:
-            experiment = "O3"
-
-        try:
-            fs, p_fs = np.loadtxt(
-                "{}Posterior_f_{}_Prior_{}_M={:.1f}_N={}.txt".format(
-                    post_f_dir, experiment, self.merger_rate_prior, self.m_pbh,
-                    self.n_pbh)).T
-        except OSError:
-            raise Exception("p(f|m_pbh, n_pbh) table not found. Make sure it "
-                            "was computed for this value of n_pbh.")
-
-        self.p_f = interp1d(fs, p_fs, bounds_error=False, fill_value=0.)
-
-    def __call__(self, f):
-        if self.p_f is None:
-            self._load_p_f_gw()
-        return self.p_f(f)
-
-    @property
-    def merger_rate_prior(self):
-        return self._merger_rate_prior
-
-    @merger_rate_prior.setter
-    def merger_rate_prior(self, val):
-        if val not in ["LF", "J"]:
-            raise ValueError("Invalid merger rate prior")
-        else:
-            self._merger_rate_prior = val
-            self.p_f = None
-
-    @property
-    def m_pbh(self):
-        return self._m_pbh
-
-    @m_pbh.setter
-    def m_pbh(self, val):
-        if val not in ligo_masses + [10, 100]:
-            raise ValueError("p(f|n_pbh) has not been calculated for this PBH "
-                             "mass")
-        else:
-            self._m_pbh = val
-            self.p_f = None
-
-    @property
-    def n_pbh(self):
-        return self._n_pbh
-
-    @n_pbh.setter
-    def n_pbh(self, val):
-        self._n_pbh = val
-        self.p_f = None
+Classes for performing posterior analysis with point source constraints.
+"""
 
 
 class Distribution_N_gamma:  # __init__(m_pbh), __call__(n_gamma, sv, f, m_dm)
@@ -271,40 +184,7 @@ class Distribution_U:  # __init__(lambda_prior), __call__(n_gamma, n_u)
             self._lambda_prior = val
 
 
-class Prior_sv:  # __init__(sv_prior), __call__(sv)
-    """Represents the prior p(sv)."""
-    def __init__(self, sv_prior="U"):
-        """
-        Parameters
-        ----------
-        sv_prior : "LF", "U"
-            Specifies which prior to use. Defaults to a uniform prior, the most
-            conservative choice.
-        """
-        self.sv_prior = sv_prior
-
-    def call(self, sv):
-        """p(<sigma v>), the prior on <sigma v>.
-        """
-        if self.sv_prior == "LF":
-            return 1 / sv
-        elif self.sv_prior == "U":
-            return 1
-        # return np.vectorize(helper)(sv)
-
-    @property
-    def sv_prior(self):
-        return self._sv_prior
-
-    @sv_prior.setter
-    def sv_prior(self, val):
-        if val not in ["U", "LF"]:
-            raise ValueError("Invalid prior on <sigma v>")
-        else:
-            self._sv_prior = val
-
-
-class PointSourcePosterior:
+class PointSourcePosterior(Posterior):
     def __init__(self, m_pbh, n_pbh, n_u=n_u_0, merger_rate_prior="LF",
                  lambda_prior="LF", sv_prior="U", test=True):
         """
@@ -314,23 +194,16 @@ class PointSourcePosterior:
             Determines which prior to use. Defaults to the conservative choice,
             "U".
         """
-        # Must instantiate these before assigning other attributes. These are
-        # wrapped with @property to keep the attributes m_pbh, n_pbh and
-        # merger_rate_prior synchronized.
+        # Subclasses whose properties need to be synchronized with this
+        # object's must be instantiated before calling the superclass
+        # initializer
         self._p_n_gamma = Distribution_N_gamma(m_pbh, test=test)
-        self._p_f = Distribution_f(m_pbh, n_pbh, merger_rate_prior)
         self._p_u = Distribution_U(lambda_prior)
-        self._p_sv = Prior_sv(sv_prior)
 
-        self.m_pbh = m_pbh
-        self.n_pbh = n_pbh
+        super().__init__(m_pbh, n_pbh, merger_rate_prior, sv_prior, test)
+
         self.n_u = n_u
-
-        self.merger_rate_prior = merger_rate_prior
         self.lambda_prior = lambda_prior
-        self.sv_prior = sv_prior
-
-        self.test = test
 
     def save_p_gamma_table(self, m_dms, svs):
         self._p_n_gamma.save_p_gamma_table(m_dms, svs)
@@ -481,105 +354,10 @@ class PointSourcePosterior:
         else:
             raise ValueError("Invalid integration method")
 
-    def save_posterior_table(self, svs, m_dms, method="trapz"):
-        """Generates a table containing the posterior for <sigma v>.
-
-        Parameters
-        ----------
-        svs : np.array
-            Must contain more than one element.
-        m_dms : np.array
-            Must contain more than one element.
-        """
-        if svs.size <= 1:
-            raise ValueError("svs must have more than one element")
-        if m_dms.size <= 1:
-            raise ValueError("m_dms must have more than one element")
-
-        # Compute unnormalized posterior
-        sv_col = np.repeat(svs, m_dms.size)
-        m_dm_col = np.tile(m_dms, svs.size)
-        un_post_vals_col = self._get_posterior_val(sv_col, m_dm_col, method)
-        np.savetxt(
-            "{}{}posterior_sv_{}.csv".format(post_sv_dir,
-                                             "test/" if self.test else "",
-                                             self.filename_suffix()),
-            np.stack([sv_col, m_dm_col, un_post_vals_col]).T,
-            header=self.header())
-
-        # Compute normalized posterior
-        un_post_vals = un_post_vals_col.reshape([svs.size, m_dms.size])
-        n_post_vals = un_post_vals_col.reshape([svs.size, m_dms.size]).copy()
-        for i, (m_dm, un_post) in enumerate(zip(m_dms, un_post_vals.T)):
-            # `quad` will not give any higher accuracy than `trapz`
-            n_post_vals[:, i] = un_post / trapz(un_post, svs)
-
-        np.savetxt(
-            "{}{}normalized_posterior_sv_{}.csv".format(
-                post_sv_dir, "test/" if self.test else "",
-                self.filename_suffix()),
-            np.stack([sv_col, m_dm_col, n_post_vals.flatten()]).T,
-            header=self.header())
-
-    def sv_bounds(self, alpha=0.95, save=True):
-        """Computes and saves bounds on <sigma v>.
-
-        Returns
-        -------
-        np.array
-            Bounds on <sigma v> at each of the DM masses in the posterior
-            tables for the given PBH mass and number. Saves these bounds to the
-            data/bounds/ directory.
-        """
-        svs, m_dms, post_vals = self.load_posterior(normalized=True)
-        sv_mg, m_dm_mg = np.meshgrid(svs, m_dms)
-        sv_bounds = np.zeros_like(m_dms)
-
-        # Compute bound for each DM mass
-        for i, (m_dm, p_vals) in enumerate(zip(m_dms, post_vals.T)):
-            sv_bounds[i] = post_sv_ci(svs, p_vals)
-
-        if save:
-            np.savetxt(
-                "{}{}sv_bounds_{}.csv".format(sv_bounds_dir,
-                                              "test/" if self.test else "",
-                                              self.filename_suffix()),
-                np.stack([m_dms, sv_bounds]).T,
-                header=("{}% CI bounds on <sigma v>.\nColumns: m_DM (GeV), "
-                        "<sigma v> (cm^3/s).").format(100 * alpha))
-
-        return m_dms, sv_bounds
-
-    def load_posterior(self, normalized=False):
-        """Loads a table of posterior values for <sigma v>.
-
-        Returns
-        -------
-        m_dms, svs, post_vals
-            post_vals is defined so that:
-                post_vals[i, j] = posterior(m_dms[i], svs[j]).
-        """
-        sv_col, m_dm_col, post_col = np.loadtxt(
-            "{}{}{}posterior_sv_{}.csv".format(
-                post_sv_dir, "test/" if self.test else "",
-                "normalized_" if normalized else "", self.filename_suffix())).T
-        svs = np.unique(sv_col)
-        m_dms = np.unique(m_dm_col)
-        post_vals = post_col.reshape([svs.size, m_dms.size])
-        return svs, m_dms, post_vals
-
     def filename_suffix(self):
-        return ("M={:.1f}_N={}_prior_rate={}_prior_lambda={}_prior_"
-                "sv={}").format(self.m_pbh, self.n_pbh, self.merger_rate_prior,
-                                self.lambda_prior, self.sv_prior)
-
-    def header(self):
-        return ("Normalized posterior for <sigma v>.\nColumns: <sigma v> "
-                "(cm^3/s), m_DM (GeV), posterior.")
-
-    # Properties
-    def p_f(self, f):
-        return self._p_f(f)
+        """Add extra info to filename"""
+        return "ps_{}_prior_lambda={}".format(super().filename_suffix(),
+                                              self.lambda_prior)
 
     def p_n_gamma(self, n_gamma, sv, f, m_dm):
         return self._p_n_gamma(n_gamma, sv, f, m_dm)
@@ -587,39 +365,11 @@ class PointSourcePosterior:
     def p_u(self, n_gamma):
         return self._p_u(n_gamma, self.n_u)
 
-    def p_sv(self, sv):
-        return self._p_sv.call(sv)
-
-    @property
-    def m_pbh(self):
-        return self._m_pbh
-
-    @m_pbh.setter
+    @Posterior.m_pbh.setter
     def m_pbh(self, val):
         # Synchronize attribute
-        self._m_pbh = val
+        Posterior.m_pbh.fset(self, val)
         self._p_n_gamma.m_pbh = val
-        self._p_f.m_pbh = val
-
-    @property
-    def n_pbh(self):
-        return self._n_pbh
-
-    @n_pbh.setter
-    def n_pbh(self, val):
-        # Synchronize attribute
-        self._n_pbh = val
-        self._p_f.n_pbh = val
-
-    @property
-    def merger_rate_prior(self):
-        return self._merger_rate_prior
-
-    @merger_rate_prior.setter
-    def merger_rate_prior(self, val):
-        # Synchronize attribute
-        self._merger_rate_prior = val
-        self._p_f.merger_rate_prior = val
 
     @property
     def lambda_prior(self):
@@ -630,13 +380,3 @@ class PointSourcePosterior:
         # Synchronize attribute
         self._lambda_prior = val
         self._p_u.lambda_prior = val
-
-    @property
-    def sv_prior(self):
-        return self._sv_prior
-
-    @sv_prior.setter
-    def sv_prior(self, val):
-        # Synchronize attribute
-        self._sv_prior = val
-        self._p_sv.sv_prior = val
