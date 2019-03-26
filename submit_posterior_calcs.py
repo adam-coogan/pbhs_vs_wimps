@@ -3,6 +3,8 @@ import numpy as np
 from posterior_inference_point import PointSourcePosterior
 import os
 from scipy.integrate import cumtrapz
+from constants import n_u_0
+import matplotlib.pylab as plt
 
 
 """
@@ -47,11 +49,11 @@ def parse_args():
     parser.add_argument("-n_u", "--n_unassociated", type=int, default=n_u_0, help="number of unassociated point sources")
     #parser.add_argument("-o", "--overwrite_p_gamma", type=bool, default=True, help="if True, overwrites existing p_gamma tables")
     parser.add_argument("-n_samples", default=100000, type=int, help="number of MC samples to use for p_gamma calculation")
-    parser.add_argument("-m_dm_min", default=1, type=float, help="minimum DM mass in GeV")
-    parser.add_argument("-m_dm_max", default=4, type=float, help="maximum DM mass in GeV")
+    parser.add_argument("-m_dm_min", default=1e1, type=float, help="minimum DM mass in GeV")
+    parser.add_argument("-m_dm_max", default=1e4, type=float, help="maximum DM mass in GeV")
     parser.add_argument("-n_m_dm", default=200, type=int, help="number of DM masses")
-    parser.add_argument("-sv_min", default=-45, type=float, help="minimum <sigma v> in cm^3/s")
-    parser.add_argument("-sv_max", default=-25, type=float, help="maximum <sigma v> in cm^3/s")
+    parser.add_argument("-sv_min", default=1e-45, type=float, help="minimum <sigma v> in cm^3/s")
+    parser.add_argument("-sv_max", default=1e-25, type=float, help="maximum <sigma v> in cm^3/s")
     parser.add_argument("-n_sv", default=200, type=int, help="number of <sigma v> values")
     parser.add_argument("-v", "--verbose", default=True, type=bool, help="if True, prints progress messages")
     parser.add_argument("-p_R", "--merger_rate_prior", default="LF", type=str, help="prior for PBH merger rate: 'LF' or 'J'")
@@ -75,6 +77,9 @@ if __name__ == '__main__':
         print("Making p_gamma table")
     m_dms = np.geomspace(args.m_dm_min, args.m_dm_max, args.n_m_dm)
     svs = np.geomspace(args.sv_min, args.sv_max, args.n_sv)
+
+    print(m_dms)
+    print(svs)
     post_ps.save_p_gamma_table(m_dms, svs)
 
     # Compute posterior for <sigma v>
