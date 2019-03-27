@@ -46,6 +46,7 @@ class Distribution_N_gamma:  # __init__(m_pbh), __call__(n_gamma, sv, f, m_dm)
                 f_pbh=1,  # doesn't affect p_gamma
                 m_dm=m_dm,
                 sv=sv,
+                fs=self.fs,
                 flux_type=self.flux_type,
                 b_cut=self.b_cut,
                 flux_thresh=self.flux_thresh,
@@ -186,7 +187,7 @@ class Distribution_U:  # __init__(lambda_prior), __call__(n_gamma, n_u)
 
 class PointSourcePosterior(Posterior):
     def __init__(self, m_pbh, n_pbh, n_u=n_u_0, merger_rate_prior="LF",
-                 lambda_prior="LF", sv_prior="U", test=True):
+                 lambda_prior="LF", sv_prior="U", fs=fs_0, test=True):
         """
         Parameters
         ----------
@@ -200,7 +201,7 @@ class PointSourcePosterior(Posterior):
         self._p_n_gamma = Distribution_N_gamma(m_pbh, test=test)
         self._p_u = Distribution_U(lambda_prior)
 
-        super().__init__(m_pbh, n_pbh, merger_rate_prior, sv_prior, test)
+        super().__init__(m_pbh, n_pbh, merger_rate_prior, sv_prior, fs, test)
 
         self.n_u = n_u
         self.lambda_prior = lambda_prior
@@ -364,6 +365,15 @@ class PointSourcePosterior(Posterior):
 
     def p_u(self, n_gamma):
         return self._p_u(n_gamma, self.n_u)
+
+    @property
+    def fs(self):
+        return self._fs
+
+    @fs.setter
+    def fs(self, val):
+        self._p_n_gamma.fs = val
+        self._fs = val
 
     @Posterior.m_pbh.setter
     def m_pbh(self, val):

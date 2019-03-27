@@ -3,7 +3,7 @@ import numpy as np
 from scipy.interpolate import interp1d
 from scipy.integrate import trapz
 
-from constants import post_sv_ci
+from constants import post_sv_ci, fs_0
 
 
 post_f_dir = "data/posteriors_f/"
@@ -138,7 +138,7 @@ class Prior_sv:  # __init__(sv_prior), __call__(sv)
 
 class Posterior(ABC):
     def __init__(self, m_pbh, n_pbh, merger_rate_prior="LF",
-                 sv_prior="U", test=True):
+                 sv_prior="U", fs=fs_0, test=True):
         """
         Parameters
         ----------
@@ -154,6 +154,7 @@ class Posterior(ABC):
 
         self.m_pbh = m_pbh
         self.n_pbh = n_pbh
+        self.fs = fs
 
         self.merger_rate_prior = merger_rate_prior
         self.sv_prior = sv_prior

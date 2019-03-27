@@ -31,7 +31,7 @@ def phi_ex(e, m_dm, sv, m_pbh, f, fs="b"):
                     dnde_interps[fs]((1 + zp) * e, m_dm))
 
         # Much faster than quad
-        zps = np.logspace(0, 3, 1000)
+        zps = np.geomspace(0.01, 1e3, 1000)
         integral = trapz(integrand(zps), zps)
 
         return (speed_of_light * f * pbh_ann_rate(m_dm, sv, m_pbh) /
