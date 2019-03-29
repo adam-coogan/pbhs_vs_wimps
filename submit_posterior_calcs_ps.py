@@ -66,7 +66,7 @@ if __name__ == '__main__':
     args = parse_args()
     
     #Generate outfile names for plots...
-    filestr = "_M={:.1f}_N={:d}_prior_rate={}_prior_lambda={}_prior_sv={}.pdf".format(args.m_pbh,args.n_pbh,args.merger_rate_prior,args.lambda_prior,args.sv_prior)
+    filestr = "_ps_M={:.1f}_N={:d}_prior_rate={}_prior_sv={}_prior_lambda={}.pdf".format(args.m_pbh,args.n_pbh,args.merger_rate_prior,args.lambda_prior,args.sv_prior)
     ### Setup
 
     # The priors are set here, and default to the conservative choices
