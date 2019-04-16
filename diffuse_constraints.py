@@ -34,6 +34,7 @@ def phi_ex(e, m_dm, sv, m_pbh, f, fs="b"):
         zps = np.geomspace(0.01, 1e3, 1000)
         integral = trapz(integrand(zps), zps)
 
+        # 10^3 converts Mpc in 1/H from integral to kpc
         return (speed_of_light * f * pbh_ann_rate(m_dm, sv, m_pbh) /
                 m_pbh * rho_dm_avg_0 / kpc_to_cm**2 * 1e3 * integral /
                 (4 * np.pi))
