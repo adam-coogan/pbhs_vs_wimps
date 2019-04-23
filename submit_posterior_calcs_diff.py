@@ -66,8 +66,7 @@ if __name__ == '__main__':
     post_ps = DiffusePosterior(
         m_pbh=args.m_pbh,
         n_pbh=args.n_pbh,
-        merger_rate_prior=args.merger_rate_prior,
-        test=False)
+        merger_rate_prior=args.merger_rate_prior)
 
     # Compute posterior for <sigma v>
     m_dms = np.geomspace(args.m_dm_min, args.m_dm_max, args.n_m_dm)

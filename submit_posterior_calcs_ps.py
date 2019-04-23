@@ -78,8 +78,7 @@ if __name__ == '__main__':
     post_ps = PointSourcePosterior(
         m_pbh=args.m_pbh,
         n_pbh=args.n_pbh,
-        merger_rate_prior=args.merger_rate_prior,
-        test=False)
+        merger_rate_prior=args.merger_rate_prior)
 
     # Make the p_gamma table
     if args.verbose:
