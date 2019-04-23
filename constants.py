@@ -11,7 +11,9 @@ Constants and utility functions. Unless otherwise noted, the units are:
 * <sigma v>: cm^3 / s
 * PBH mass: M_sun
 * Densities: M_sun / kpc^3
-* dN/dE: (GeV cm^2 sr s)^{-1}
+* dN/dE: GeV^{-1}.
+* phi, the differential flux: (GeV cm^2 s sr)^{-1}
+* Phi, the integrated flux: (cm^2 s sr)^{-1}
 * Distances: kpc
 * Angles: rad
 """
@@ -330,7 +332,7 @@ def phi_g_egb_fermi(e):
     Returns
     -------
     float
-        EGB flux.
+        EGB flux, (GeV cm^2 s sr)^{-1}.
     """
     I100 = 1.48e-7 * 1e3  # (GeV cm^2 s sr)^{-1}
     gamma_fermi = 2.31
