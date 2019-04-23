@@ -193,6 +193,10 @@ class Posterior(ABC):
     """
     Base class for computing p(<sigma v> | ...), saving and loading data tables
     and computing upper bounds.
+
+    To-do
+    -----
+    Store loaded data in attributes?
     """
 
     def __init__(self, m_pbh, n_pbh, merger_rate_prior="LF",
@@ -235,13 +239,14 @@ class Posterior(ABC):
 
     @abstractmethod
     def _get_posterior_val(self, sv, m_dm):
-        """Computes the posterior for <sigma v>. Must support broadcasting over
-        sv and m_dm.
+        """Computes the posterior for <sigma v> at a set of (m_dm, <sigma v>)
+        points. Must support broadcasting over sv and m_dm.
         """
         pass
 
     def save_posterior_table(self, svs, m_dms):
-        """Generates a table containing the posterior for <sigma v>.
+        """Generates tables with the normalized and unnormalized posterior for
+        <sigma v> and saves them to post_sv_dir.
 
         Parameters
         ----------
@@ -259,12 +264,14 @@ class Posterior(ABC):
         sv_col = np.repeat(svs, m_dms.size)
         m_dm_col = np.tile(m_dms, svs.size)
         un_post_vals_col = self._get_posterior_val(sv_col, m_dm_col)
-        np.savetxt(
-            "{}{}posterior_sv_{}.csv".format(post_sv_dir,
-                                             "test/" if self.test else "",
-                                             self.filename_suffix()),
-            np.stack([sv_col, m_dm_col, un_post_vals_col]).T,
-            header=self.header())
+
+        # Save the table
+        un_fname = "{}{}posterior_sv_{}.csv".format(
+            post_sv_dir, "test/" if self.test else "", self.filename_suffix())
+        header = ("Posterior for <sigma v>.\n"
+                  "Columns: <sigma v> (cm^3/s), m_DM (GeV), posterior.")
+        np.savetxt(un_fname, np.stack([sv_col, m_dm_col, un_post_vals_col]).T,
+                   header=header)
 
         # Compute normalized posterior
         un_post_vals = un_post_vals_col.reshape([svs.size, m_dms.size])
@@ -273,22 +280,21 @@ class Posterior(ABC):
             # `quad` will not give any higher accuracy than `trapz`
             n_post_vals[:, i] = un_post / trapz(un_post, svs)
 
-        np.savetxt(
-            "{}{}normalized_posterior_sv_{}.csv".format(
-                post_sv_dir, "test/" if self.test else "",
-                self.filename_suffix()),
-            np.stack([sv_col, m_dm_col, n_post_vals.flatten()]).T,
-            header=self.header())
+        # Save the table
+        n_fname = "{}{}normalized_posterior_sv_{}.csv".format(
+            post_sv_dir, "test/" if self.test else "", self.filename_suffix())
+        np.savetxt(n_fname,
+                   np.stack([sv_col, m_dm_col, n_post_vals.flatten()]).T,
+                   header=header)
 
     def sv_bounds(self, alpha=0.95, save=True):
-        """Computes and saves bounds on <sigma v>.
+        """Computes bounds on <sigma v> and saves them to sv_bounds_dir.
 
         Returns
         -------
         np.array
             Bounds on <sigma v> at each of the DM masses in the posterior
-            tables for the given PBH mass and number. Saves these bounds to the
-            data/bounds/ directory.
+            tables for the given PBH mass and number.
         """
         svs, m_dms, post_vals = self.load_posterior(normalized=True)
         sv_mg, m_dm_mg = np.meshgrid(svs, m_dms)
@@ -299,13 +305,12 @@ class Posterior(ABC):
             sv_bounds[i] = post_sv_ci(svs, p_vals)
 
         if save:
-            np.savetxt(
-                "{}{}sv_bounds_{}.csv".format(sv_bounds_dir,
-                                              "test/" if self.test else "",
-                                              self.filename_suffix()),
-                np.stack([m_dms, sv_bounds]).T,
-                header=("{}% CI bounds on <sigma v>.\nColumns: m_DM (GeV), "
-                        "<sigma v> (cm^3/s).").format(100 * alpha))
+            fname = "{}{}sv_bounds_{}.csv".format(sv_bounds_dir,
+                                                  "test/" if self.test else "",
+                                                  self.filename_suffix())
+            np.savetxt(fname, np.stack([m_dms, sv_bounds]).T,
+                       header=("{}% CI bounds on <sigma v>.\nColumns: m_DM "
+                               "(GeV), <sigma v> (cm^3/s).").format(100*alpha))
 
         return m_dms, sv_bounds
 
@@ -314,39 +319,37 @@ class Posterior(ABC):
 
         Returns
         -------
-        m_dms, svs, post_vals
-            post_vals is defined so that:
-                post_vals[i, j] = posterior(m_dms[i], svs[j]).
+        np.array, np.array, np.array
+            svs, m_dms, post_vals. The firstpost arrays are 1D. The third
+            contains the posterior values over the grid these define, and
+            satisfies post_vals[i, j] = posterior(svs[i], m_dms[j]).
         """
-        sv_col, m_dm_col, post_col = np.loadtxt(
-            "{}{}{}posterior_sv_{}.csv".format(
-                post_sv_dir, "test/" if self.test else "",
-                "normalized_" if normalized else "", self.filename_suffix())).T
+        fname = "{}{}{}posterior_sv_{}.csv".format(
+            post_sv_dir, "test/" if self.test else "",
+            "normalized_" if normalized else "", self.filename_suffix())
+        sv_col, m_dm_col, post_col = np.loadtxt(fname).T
         svs = np.unique(sv_col)
         m_dms = np.unique(m_dm_col)
         post_vals = post_col.reshape([svs.size, m_dms.size])
         return svs, m_dms, post_vals
 
     def filename_suffix(self):
+        """Helper function returning a string containing PBH and prior
+        information."""
         return ("M={:.1f}_N={}_prior_rate={}_"
                 "prior_sv={}").format(self.m_pbh, self.n_pbh,
                                       self.merger_rate_prior, self.sv_prior)
 
-    def header(self):
-        """Header for posterior table file"""
-        return ("Posterior for <sigma v>.\n"
-                "Columns: <sigma v> (cm^3/s), m_DM (GeV), posterior.")
-
     def p_f(self, f):
-        """Computes p(f | m_pbh, n_pbh)"""
+        """Computes p(f | m_pbh, n_pbh)."""
         return self._p_f(f)
 
     def p_sv(self, sv):
-        """Computes prior p(sv)"""
+        """Computes prior p(sv)."""
         return self._p_sv.call(sv)
 
     # Properties must also set the corresponding properties of Posterior's
-    # attributes to keep them synchronized!
+    # attributes to keep them synchronized
     @property
     def m_pbh(self):
         return self._m_pbh
