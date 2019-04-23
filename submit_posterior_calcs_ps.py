@@ -1,7 +1,6 @@
 from argparse import ArgumentParser
 import numpy as np
 from posterior_inference_point import PointSourcePosterior
-import os
 from scipy.integrate import cumtrapz
 from constants import n_u_0
 import matplotlib.pylab as plt
@@ -14,13 +13,16 @@ data/posteriors_sv/.
 Notes
 -----
 * The required directory structure is the following:
-    - data/p_gammas/: for storing p_gamma tables computed by the point source MC.
-    - data/posteriors_f/: posteriors p(f|m_pbh, n_pbh) for GW experiments and SKA.
+    - data/p_gammas/: for storing p_gamma tables computed by the point source
+      MC.
+    - data/posteriors_f/: posteriors p(f|m_pbh, n_pbh) for GW experiments and
+      SKA.
     - data/posteriors_sv/: for storing <sigma v> posterior tables.
 * Other required files:
     - constants.py: constants and utility functions.
     - pbhhalosim.py: class for point source MC.
-    - posterior_inference_point.py: class for posterior inference for <sigma v> (using Point sources).
+    - posterior_inference_point.py: class for posterior inference for <sigma v>
+      (using Point sources).
 
 Command line arguments
 ----------------------
@@ -47,7 +49,7 @@ def parse_args():
     parser.add_argument("-n_pbh", type=int, required=True, help="number of detected PBHs")
     # Optional
     parser.add_argument("-n_u", "--n_unassociated", type=int, default=n_u_0, help="number of unassociated point sources")
-    #parser.add_argument("-o", "--overwrite_p_gamma", type=bool, default=True, help="if True, overwrites existing p_gamma tables")
+    # parser.add_argument("-o", "--overwrite_p_gamma", type=bool, default=True, help="if True, overwrites existing p_gamma tables")
     parser.add_argument("-n_samples", default=100000, type=int, help="number of MC samples to use for p_gamma calculation")
     parser.add_argument("-m_dm_min", default=1e1, type=float, help="minimum DM mass in GeV")
     parser.add_argument("-m_dm_max", default=1e4, type=float, help="maximum DM mass in GeV")
@@ -64,15 +66,22 @@ def parse_args():
 
 if __name__ == '__main__':
     args = parse_args()
-    
-    #Generate outfile names for plots...
-    filestr = "_ps_M={:.1f}_N={:d}_prior_rate={}_prior_sv={}_prior_lambda={}.pdf".format(args.m_pbh,args.n_pbh,args.merger_rate_prior,args.lambda_prior,args.sv_prior)
-    ### Setup
 
+    # Generate outfile names for plots...
+    filestr = ("_ps_M={:.1f}_N={:d}_prior_rate={}_prior_sv={}_"
+               "prior_lambda={}.pdf").format(args.m_pbh, args.n_pbh,
+                                             args.merger_rate_prior,
+                                             args.lambda_prior, args.sv_prior)
+
+    # Setup
     # The priors are set here, and default to the conservative choices
-    post_ps = PointSourcePosterior(m_pbh=args.m_pbh, n_pbh=args.n_pbh, merger_rate_prior=args.merger_rate_prior,  test=False)
+    post_ps = PointSourcePosterior(
+        m_pbh=args.m_pbh,
+        n_pbh=args.n_pbh,
+        merger_rate_prior=args.merger_rate_prior,
+        test=False)
 
-    ### Make the p_gamma table
+    # Make the p_gamma table
     if args.verbose:
         print("Making p_gamma table")
     m_dms = np.geomspace(args.m_dm_min, args.m_dm_max, args.n_m_dm)
@@ -89,11 +98,10 @@ if __name__ == '__main__':
 
     if args.verbose:
         print("Generating some plots")
-        
-    ## Load results
+
+    # Load results
     svs, m_dms, un_post_vals = post_ps.load_posterior(normalized=False)
     _, _, post_vals = post_ps.load_posterior(normalized=True)
-
 
     # Plot posterior(<sigma v>) and its CDF to make sure the <sigma v>
     # grid isn't clipping anything
@@ -115,12 +123,12 @@ if __name__ == '__main__':
         ax.set_xscale("log")
         ax.set_xlabel(r"$\langle \sigma v \rangle$ (cm$^3$/s)")
         ax.legend()
-        
+
     plt.savefig("figures/sv_bounds/monitoring" + filestr, bbox_inches='tight')
-    
-    #Limit plot
+
+    # Limit plot
     plt.figure()
-    
+
     # Load the unnormalized posterior table
     svs, m_dms, un_post_vals = post_ps.load_posterior(normalized=False)
 
@@ -139,7 +147,6 @@ if __name__ == '__main__':
     plt.xlim(m_dms[[0, -1]])
     plt.ylim(svs[[0, -1]])
     plt.savefig("figures/sv_bounds/post_sv" + filestr, bbox_inches='tight')
-        
 
     if args.verbose:
         print("Done computing")

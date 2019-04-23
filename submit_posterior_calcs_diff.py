@@ -1,7 +1,6 @@
 from argparse import ArgumentParser
 import numpy as np
 from posterior_inference_diffuse import DiffusePosterior
-import os
 from scipy.integrate import cumtrapz
 from constants import n_u_0
 import matplotlib.pylab as plt
@@ -58,11 +57,11 @@ def parse_args():
 if __name__ == '__main__':
     args = parse_args()
 
-    #Generate outfile names for plots...
+    # Generate outfile names for plots...
     filestr = ("_diff_M={:.1f}_N={:d}_prior_rate={}_prior_sv={}.pdf".format(
         args.m_pbh, args.n_pbh, args.merger_rate_prior, args.sv_prior))
-    ### Setup
 
+    # Setup
     # The priors are set here, and default to the conservative choices
     post_ps = DiffusePosterior(
         m_pbh=args.m_pbh,
@@ -84,13 +83,12 @@ if __name__ == '__main__':
     if args.verbose:
         print("Generating some plots")
 
-    ## Load results
+    # Load results
     svs, m_dms, un_post_vals = post_ps.load_posterior(normalized=False)
     _, _, post_vals = post_ps.load_posterior(normalized=True)
 
-
-    # Plot posterior(<sigma v>) and its CDF to make sure the <sigma v>
-    # grid isn't clipping anything
+    # Plot posterior(<sigma v>) and its CDF to make sure the <sigma v> grid
+    # isn't clipping anything
     fig, axes = plt.subplots(1, 2, figsize=(12, 4))
 
     ax = axes[0]
@@ -112,7 +110,7 @@ if __name__ == '__main__':
 
     plt.savefig("figures/sv_bounds/monitoring" + filestr, bbox_inches='tight')
 
-    #Limit plot
+    # Limit plot
     plt.figure()
 
     # Load the unnormalized posterior table
