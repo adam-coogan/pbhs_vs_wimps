@@ -312,23 +312,10 @@ class PointSourcePosterior(Posterior):
 
         return f_samples
 
-    def _get_posterior_val_quad(self, sv, m_dm):
-        def helper(sv, m_dm):
-            post_val = 0
-            for n_gamma in np.arange(0, self.n_u + 1, 1):
-                # Get grid of fs near the integrand's peak
-                fs = np.geomspace(f_min, f_max, 100)
-                points_f = self._get_f_quad_points(
-                    fs, self.integrand(fs, n_gamma, sv, m_dm))
-
-                post_val += quad(
-                    self.integrand, f_min, f_max, args=(n_gamma, sv, m_dm),
-                    points=points_f, epsabs=1e-99)[0]
-
-            return post_val
-        return np.vectorize(helper)(sv, m_dm)
-
-    def _get_posterior_val_trapz(self, sv, m_dm):
+    def _get_posterior_val(self, sv, m_dm):
+        """Computes the posterior for <sigma v>. Supports broadcasting over sv
+        and m_dm. See documentation for `posterior_integrand`.
+        """
         def helper(sv, m_dm):
             # Compute integrand values over an initial f grid
             fs = np.geomspace(f_min, f_max, 100)
@@ -343,17 +330,6 @@ class PointSourcePosterior(Posterior):
 
             return trapz(integrand_vals, f_mg, axis=0).sum()
         return np.vectorize(helper)(sv, m_dm)
-
-    def _get_posterior_val(self, sv, m_dm, method="trapz"):
-        """Computes the posterior for <sigma v>. Supports broadcasting over sv
-        and m_dm. See documentation for `posterior_integrand`.
-        """
-        if method == "quad":
-            return self._get_posterior_val_quad(sv, m_dm)
-        elif method == "trapz":
-            return self._get_posterior_val_trapz(sv, m_dm)
-        else:
-            raise ValueError("Invalid integration method")
 
     def filename_suffix(self):
         """Add extra info to filename"""

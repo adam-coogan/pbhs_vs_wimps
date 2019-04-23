@@ -111,7 +111,10 @@ class DiffusePosterior(Posterior):
         return np.concatenate([np.geomspace(f_low, f_peak, n_low),
                                np.geomspace(f_peak, f_high, n_high)])
 
-    def _get_posterior_val_trapz(self, sv, m_dm):
+    def _get_posterior_val(self, sv, m_dm):
+        """Computes the posterior for <sigma v>. Supports broadcasting over sv
+        and m_dm. See documentation for `posterior_integrand`.
+        """
         def helper(sv, m_dm):
             # Compute integrand values over an initial f grid
             fs = np.geomspace(f_min, f_max, 20)
@@ -127,17 +130,6 @@ class DiffusePosterior(Posterior):
             return integral_vals
 
         return np.vectorize(helper)(sv, m_dm)
-
-    def _get_posterior_val(self, sv, m_dm, method="trapz"):
-        """Computes the posterior for <sigma v>. Supports broadcasting over sv
-        and m_dm. See documentation for `posterior_integrand`.
-        """
-        if method == "quad":
-            raise NotImplementedError("quad not supported")
-        elif method == "trapz":
-            return self._get_posterior_val_trapz(sv, m_dm)
-        else:
-            raise ValueError("Invalid integration method")
 
     def filename_suffix(self):
         """Add extra info to filename"""

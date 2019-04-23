@@ -6,26 +6,16 @@ from scipy.integrate import trapz
 from constants import post_sv_ci, fs_0
 
 
-post_f_dir = "data/posteriors_f/"
-post_sv_dir = "data/posteriors_sv/"
-p_gamma_dir = "data/p_gammas/"
-sv_bounds_dir = "data/bounds/"
-ligo_masses = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
-# f range used by Jung B
-log10_f_min, log10_f_max = -6, 0
-f_min, f_max = 1e-6, 1
-
-
 """
-Classes used for point-source and diffuse posterior analysis.
+Shared infrastructure for point-source and diffuse posterior analyses.
 
-Design notes
+Notes
 ------------
-Each probability distribution should be a callable (either a function or a
+Each probability distribution is a callable (either a function or a
 class).
 
-Distributions that take a while to compute should save their parameters
-to tables that can easily be loaded. This includes p(f|m_pbh, n_pbh) and
+Distributions that take a while to compute save their parameters to tables that
+can easily be loaded. This includes p(f|m_pbh, n_pbh) and
 p(n_gamma|m_dm, sv, m_pbh, f).
 
 If changing a parameter requires time-consuming updates to the distribution's
@@ -33,17 +23,65 @@ parameters, it should be an argument to its initializer. If not, it should be
 an argument to `__call__`.
 """
 
+# Directory containing tables for p(f | m_pbh, n_pbh)
+post_f_dir = "data/posteriors_f/"
+# Output directory for <sigma v> posterior tables
+post_sv_dir = "data/posteriors_sv/"
+# Directory for p_gamma tables
+p_gamma_dir = "data/p_gammas/"
+# Directory for <sigma v> bounds
+sv_bounds_dir = "data/bounds/"
+# Masses for LIGO O3
+ligo_masses = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+# Range of fs for which p(f | m_pbh, n_pbh) was computed
+log10_f_min, log10_f_max = -6, 0
+f_min, f_max = 1e-6, 1
 
-class Distribution_f:  # __init__(m_pbh, n_pbh, merger_rate_prior), __call__(f)
-    """Represents p(f|m_pbh, n_pbh).
+
+class Distribution_f:
     """
+    Represents p(f|m_pbh, n_pbh).
+
+    Examples
+    --------
+    This class is a wrapper around data tables. It is straightforward to
+    initialize and evaluate:
+
+    >>> p_f = Distribution_f(m_pbh=10, n_pbh=1, merger_rate_prior="LF")
+    >>> p_f(1e-4)
+    array(80.79149236)
+
+    When attributes are reset, the relevant tables will be reloaded if
+    possible:
+
+    >>> p_f.m_pbh = 0.5
+    >>> p_f(1e-4)
+    array(4.69992612)
+    >>> p_f.m_pbh = 0.01
+    ValueError: p(f|n_pbh) has not been calculated for this PBH mass
+    """
+
     def __init__(self, m_pbh, n_pbh, merger_rate_prior):
+        """Initializer. In our paper we only consider one experiment for each
+        PBH mass, so this uniquely determines which experiment to load the f
+        distribution for.
+
+        Parameters
+        ----------
+        m_pbh : float
+            PBH mass.
+        n_pbh : float
+            Number of PBH detections
+        merger_rate_prior : str
+            Prior on R: either "LF" (log-flat, the conservative choice) or "J"
+            (Jeffrey's).
+        """
         self.m_pbh = m_pbh
         self.n_pbh = n_pbh
         self.merger_rate_prior = merger_rate_prior
 
     def _load_p_f_gw(self):
-        """Loads p(f|m_pbh, n_pbh) for gravitational wave detectors.
+        """Loads p(f|m_pbh, n_pbh) into an interpolator.
         """
         if (self.m_pbh == 10):
             experiment = "ET"
@@ -64,12 +102,25 @@ class Distribution_f:  # __init__(m_pbh, n_pbh, merger_rate_prior), __call__(f)
         self.p_f = interp1d(fs, p_fs, bounds_error=False, fill_value=0.)
 
     def __call__(self, f):
+        """Evaluates p(f|m_pbh, n_pbh).
+
+        Parameters
+        ----------
+        f : float
+            Relative PBH abundance.
+
+        Returns
+        -------
+        float
+            Posterior probability for f.
+        """
         if self.p_f is None:
             self._load_p_f_gw()
         return self.p_f(f)
 
     @property
     def merger_rate_prior(self):
+        """str : prior on merger rate."""
         return self._merger_rate_prior
 
     @merger_rate_prior.setter
@@ -82,6 +133,7 @@ class Distribution_f:  # __init__(m_pbh, n_pbh, merger_rate_prior), __call__(f)
 
     @property
     def m_pbh(self):
+        """float : PBH mass."""
         return self._m_pbh
 
     @m_pbh.setter
@@ -95,6 +147,7 @@ class Distribution_f:  # __init__(m_pbh, n_pbh, merger_rate_prior), __call__(f)
 
     @property
     def n_pbh(self):
+        """float : number of PBH detections."""
         return self._n_pbh
 
     @n_pbh.setter
@@ -137,18 +190,37 @@ class Prior_sv:  # __init__(sv_prior), __call__(sv)
 
 
 class Posterior(ABC):
+    """
+    Base class for computing p(<sigma v> | ...), saving and loading data tables
+    and computing upper bounds.
+    """
+
     def __init__(self, m_pbh, n_pbh, merger_rate_prior="LF",
-                 sv_prior="U", fs=fs_0, test=True):
-        """
+                 sv_prior="U", fs=fs_0, test=False):
+        """Initializer.
+
         Parameters
         ----------
-        prior: "U", "LF"
-            Determines which prior to use. Defaults to the conservative choice,
-            "U".
+        m_pbh : float
+            PBH mass.
+        n_pbh : float
+            Number of PBH detections
+        merger_rate_prior : str
+            Prior on R: either "LF" (log-flat, the conservative choice) or "J"
+            (Jeffrey's).
+        sv_prior: str
+            Determines which prior to use for <sigma v>: "U" (uniform, the
+            conservative choice) or "LF" (log-flat).
+        fs : str
+            DM annihilation final state.
+        test : bool
+            Setting this to True reads and writes all data tables to test/
+            subdirectories. This is useful when worried about overwriting large
+            tables that took a long time to compute.
         """
         # Must instantiate these before assigning other attributes. These are
         # wrapped with @property to keep the attributes m_pbh, n_pbh and
-        # merger_rate_prior synchronized.
+        # merger_rate_prior synchronized by hiding the underlying classes.
         self._p_f = Distribution_f(m_pbh, n_pbh, merger_rate_prior)
         self._p_sv = Prior_sv(sv_prior)
 
@@ -168,7 +240,7 @@ class Posterior(ABC):
         """
         pass
 
-    def save_posterior_table(self, svs, m_dms, method="trapz"):
+    def save_posterior_table(self, svs, m_dms):
         """Generates a table containing the posterior for <sigma v>.
 
         Parameters
@@ -186,7 +258,7 @@ class Posterior(ABC):
         # Compute unnormalized posterior
         sv_col = np.repeat(svs, m_dms.size)
         m_dm_col = np.tile(m_dms, svs.size)
-        un_post_vals_col = self._get_posterior_val(sv_col, m_dm_col, method)
+        un_post_vals_col = self._get_posterior_val(sv_col, m_dm_col)
         np.savetxt(
             "{}{}posterior_sv_{}.csv".format(post_sv_dir,
                                              "test/" if self.test else "",
