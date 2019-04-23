@@ -42,8 +42,8 @@ class Distribution_N_gamma:  # __init__(m_pbh), __call__(n_gamma, sv, f, m_dm)
             MC estimate of p_gamma and corresponding error.
             """
             sim = PBHHaloSim(
-                mass_dist=self.m_pbh,
-                f_pbh=1,  # doesn't affect p_gamma
+                m_pbh=self.m_pbh,
+                f=1,  # doesn't affect p_gamma
                 m_dm=m_dm,
                 sv=sv,
                 fs=self.fs,

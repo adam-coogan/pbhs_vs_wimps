@@ -6,7 +6,9 @@ from scipy.interpolate import interp1d, interp2d
 from scipy.optimize import root_scalar
 
 """
-Constants and utility functions. Unless otherwise noted, the units are:
+Constants and utility functions.
+
+Unless otherwise noted, the units are:
 * DM mass, gamma-ray energy: GeV
 * <sigma v>: cm^3 / s
 * PBH mass: M_sun

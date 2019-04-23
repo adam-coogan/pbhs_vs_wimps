@@ -93,7 +93,7 @@ def get_p_gamma_val(m_pbh,
     -----
     Vectorize this over m_dm.
     """
-    sim = PBHHaloSim(mass_dist=m_pbh, f_pbh=1, m_dm=m_dm, sv=sv,
+    sim = PBHHaloSim(m_pbh=m_pbh, f_pbh=1, m_dm=m_dm, sv=sv,
                      flux_type=flux_type, b_cut=b_cut, flux_thresh=flux_thresh,
                      n_samples=n_samples)
     sim.run()

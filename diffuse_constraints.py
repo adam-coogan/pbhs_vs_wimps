@@ -8,8 +8,8 @@ from constants import d_earth, pbh_ann_rate, fs_0
 
 
 """
-Functions for computing constraints on PBHs with diffuse gamma-ray
-observations.
+Functions for computing diffuse flux from PBHs and a simple version of the
+resulting constraint on <sigma v>.
 """
 
 
