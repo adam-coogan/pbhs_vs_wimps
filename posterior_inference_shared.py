@@ -8,19 +8,6 @@ from constants import post_sv_ci, fs_0
 
 """
 Shared infrastructure for point-source and diffuse posterior analyses.
-
-Notes
-------------
-Each probability distribution is a callable (either a function or a
-class).
-
-Distributions that take a while to compute save their parameters to tables that
-can easily be loaded. This includes p(f|m_pbh, n_pbh) and
-p(n_gamma|m_dm, sv, m_pbh, f).
-
-If changing a parameter requires time-consuming updates to the distribution's
-parameters, it should be an argument to its initializer. If not, it should be
-an argument to `__call__`.
 """
 
 # Directory containing tables for p(f | m_pbh, n_pbh)
@@ -192,7 +179,8 @@ class Prior_sv:  # __init__(sv_prior), __call__(sv)
 class Posterior(ABC):
     """
     Base class for computing p(<sigma v> | ...), saving and loading data tables
-    and computing upper bounds.
+    and computing upper bounds on <sigma v>. See the submission scripts and
+    posterior_analysis_tutorial.ipynb for examples.
 
     To-do
     -----

@@ -9,12 +9,12 @@ from pbhhalosim import PBHHaloSim
 from posterior_inference_shared import f_min, f_max, Posterior
 
 
-p_gamma_dir = "data/p_gammas/"
-
-
 """
 Classes for performing posterior analysis with point source constraints.
 """
+
+# Directory for p_gamma tables
+p_gamma_dir = "data/p_gammas/"
 
 
 class Distribution_N_gamma:  # __init__(m_pbh), __call__(n_gamma, sv, f, m_dm)
@@ -188,12 +188,26 @@ class Distribution_U:  # __init__(lambda_prior), __call__(n_gamma, n_u)
 class PointSourcePosterior(Posterior):
     def __init__(self, m_pbh, n_pbh, n_u=n_u_0, merger_rate_prior="LF",
                  lambda_prior="LF", sv_prior="U", fs=fs_0, test=True):
-        """
+        """Initializer.
+
         Parameters
         ----------
-        prior: "U", "LF"
-            Determines which prior to use. Defaults to the conservative choice,
-            "U".
+        m_pbh : float
+            PBH mass.
+        n_pbh : float
+            Number of PBH detections
+        merger_rate_prior : str
+            Prior on R: either "LF" (log-flat, the conservative choice) or "J"
+            (Jeffrey's).
+        sv_prior: str
+            Determines which prior to use for <sigma v>: "U" (uniform, the
+            conservative choice) or "LF" (log-flat).
+        fs : str
+            DM annihilation final state.
+        test : bool
+            Setting this to True reads and writes all data tables to test/
+            subdirectories. This is useful when worried about overwriting large
+            tables that took a long time to compute.
         """
         # Subclasses whose properties need to be synchronized with this
         # object's must be instantiated before calling the superclass

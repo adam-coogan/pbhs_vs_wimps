@@ -1,40 +1,58 @@
 import numpy as np
-from scipy.integrate import quad, trapz
+from scipy.integrate import trapz
 from constants import e_egb, err_high_egb, fs_0
 from diffuse_constraints import phi_ex
 from posterior_inference_shared import f_min, f_max, Posterior
 
 
-p_gamma_dir = "data/p_gammas/"
-
-
-"""
-Classes for performing posterior analysis with diffuse constraints.
-"""
-
-
 class DiffusePosterior(Posterior):
+    """
+    Class for performing posterior analysis with diffuse constraints. See the
+    submission scripts and posterior_analysis_tutorial.ipynb for examples.
+    """
+
     def __init__(self, m_pbh, n_pbh, merger_rate_prior="LF", sv_prior="U",
                  fs=fs_0, test=True):
-        """
+        """Initializer.
+
         Parameters
         ----------
-        prior: "U", "LF"
-            Determines which prior to use. Defaults to the conservative choice,
-            "U".
+        m_pbh : float
+            PBH mass.
+        n_pbh : float
+            Number of PBH detections
+        merger_rate_prior : str
+            Prior on R: either "LF" (log-flat, the conservative choice) or "J"
+            (Jeffrey's).
+        sv_prior: str
+            Determines which prior to use for <sigma v>: "U" (uniform, the
+            conservative choice) or "LF" (log-flat).
+        fs : str
+            DM annihilation final state.
+        test : bool
+            Setting this to True reads and writes all data tables to test/
+            subdirectories. This is useful when worried about overwriting large
+            tables that took a long time to compute.
         """
-        # Subclasses whose properties need to be synchronized with this
-        # object's must be instantiated before calling the superclass
-        # initializer
         super().__init__(m_pbh, n_pbh, merger_rate_prior, sv_prior, fs, test)
 
     def integrand(self, f, sv, m_dm):
-        """Computes the value of the posterior integrand/summand.
+        """Computes the value of the posterior integrand (appendix A2 of our
+        paper).
 
         Parameters
         ----------
-        sv : float
         f : float
+            Relative PBH abundance.
+        sv : float
+            Self-annihilation cross section.
+        m_dm : float
+            DM mass.
+
+        Returns
+        -------
+        float
+            Integrand value.
         """
         def helper(f, sv, m_dm):
             log_prob = np.log(self.p_sv(sv) * self.p_f(f))
@@ -46,54 +64,33 @@ class DiffusePosterior(Posterior):
 
         return np.vectorize(helper)(f, sv, m_dm)
 
-    def _get_f_quad_points(self, fs, integrand_vals, frac=0.1, n=10):
-        """Samples log-space points around the peak of the posterior integrand.
-
-        Returns
-        -------
-        Array of log-spaced values of f out to where the integrand decreases to
-        10% of its maximum value, and the f at which it attains its maximum
-        value.
-        """
-        integrand_max = integrand_vals.max(axis=0)
-        # Choose some fraction of the max value to sample out to
-        min_sample_val = frac * integrand_max
-        d = (np.sign(min_sample_val - integrand_vals[:-1]) -
-             np.sign(min_sample_val - integrand_vals[1:]))
-        try:
-            f_low = fs[max(0, np.where(d > 0)[0][0])]
-        except IndexError:
-            f_low = fs[0]
-        try:
-            f_high = fs[min(len(fs)-1, np.where(d < 0)[0][-1])]
-        except IndexError:
-            f_high = fs[-1]
-
-        return np.append(np.geomspace(f_low, f_high, n-1),
-                         fs[np.argmax(integrand_vals, axis=0)])
-
     def _get_trapz_f_samples(self, fs, integrand_vals, frac=1e-10, n_low=75,
                              n_high=350):
         """Resamples log-spaced points below and above the posterior
         integrand's peak.
 
+        Notes
+        -----
+        I found this is a good way to get accuracy with trapz that's at least
+        as good as with quad, and much faster.
+
         Parameters
         ----------
-        fs : np.array with shape N
-        integrand_vals : np.array with shape N x M
-            Array of integrand values, with rows corresponding to the values in
-            fs and columns to different values of n_gamma.
+        fs : np.array
+            Array of f values with shape [N].
+        integrand_vals : np.array
+            Array of integrand values with shape [N, M]. The rows correspond to
+            the values in fs and columns to different values of <sigma v>.
         n_low : int
-            Number of points to sample below peak. If peak is flush against
-            fs[0], then n_low more values will be sampled around the peak.
+            Number of points to sample below peak.
         n_high : int
-            Number of points to sample above peak. If peak is flush against
-            fs[-1], then n_high more values will be sampled around the peak.
+            Number of points to sample above peak.
 
         Returns
         -------
-        np.array with shape n_low+n_peak+n_high x M
-            Resampled f values
+        np.array
+            Array of shape [n_low + n_peak + n_high, M] containing resampled f
+            values.
         """
         # Define the integrand's peak
         integrand_max = integrand_vals.max(axis=0)
@@ -113,20 +110,23 @@ class DiffusePosterior(Posterior):
 
     def _get_posterior_val(self, sv, m_dm):
         """Computes the posterior for <sigma v>. Supports broadcasting over sv
-        and m_dm. See documentation for `posterior_integrand`.
+        and m_dm.
         """
         def helper(sv, m_dm):
             # Compute integrand values over an initial f grid
             fs = np.geomspace(f_min, f_max, 20)
             sv_mg, f_mg = np.meshgrid(sv, fs)
             integrand_vals = self.integrand(f_mg, sv_mg, m_dm)
+
             # Resample fs
             f_mg = self._get_trapz_f_samples(
                 fs, integrand_vals, n_low=50, n_high=150)
             sv_mg = sv * np.ones_like(f_mg)
+
             # Compute integral over new grid
             integrand_vals = self.integrand(f_mg, sv_mg, m_dm)
             integral_vals = trapz(integrand_vals, f_mg, axis=0)
+
             return integral_vals
 
         return np.vectorize(helper)(sv, m_dm)
