@@ -251,28 +251,28 @@ class Posterior(ABC):
         # Compute unnormalized posterior
         sv_col = np.repeat(svs, m_dms.size)
         m_dm_col = np.tile(m_dms, svs.size)
-        un_post_vals_col = self._get_posterior_val(sv_col, m_dm_col)
+        un_post_col = self._get_posterior_val(sv_col, m_dm_col)
 
         # Save the table
         un_fname = "{}{}posterior_sv_{}.csv".format(
             post_sv_dir, "test/" if self.test else "", self.filename_suffix())
         header = ("Posterior for <sigma v>.\n"
                   "Columns: <sigma v> (cm^3/s), m_DM (GeV), posterior.")
-        np.savetxt(un_fname, np.stack([sv_col, m_dm_col, un_post_vals_col]).T,
+        np.savetxt(un_fname, np.stack([sv_col, m_dm_col, un_post_col]).T,
                    header=header)
 
         # Compute normalized posterior
-        un_post_vals = un_post_vals_col.reshape([svs.size, m_dms.size])
-        n_post_vals = un_post_vals_col.reshape([svs.size, m_dms.size]).copy()
-        for i, (m_dm, un_post) in enumerate(zip(m_dms, un_post_vals.T)):
+        un_post = un_post_col.reshape([svs.size, m_dms.size])
+        post = un_post_col.reshape([svs.size, m_dms.size]).copy()
+        for i, (m_dm, un_post) in enumerate(zip(m_dms, un_post.T)):
             # `quad` will not give any higher accuracy than `trapz`
-            n_post_vals[:, i] = un_post / trapz(un_post, svs)
+            post[:, i] = un_post / trapz(un_post, svs)
 
         # Save the table
         n_fname = "{}{}normalized_posterior_sv_{}.csv".format(
             post_sv_dir, "test/" if self.test else "", self.filename_suffix())
         np.savetxt(n_fname,
-                   np.stack([sv_col, m_dm_col, n_post_vals.flatten()]).T,
+                   np.stack([sv_col, m_dm_col, post.flatten()]).T,
                    header=header)
 
     def sv_bounds(self, alpha=0.95, save=True):
@@ -312,6 +312,18 @@ class Posterior(ABC):
             contains the posterior values over the grid these define, and
             satisfies post_vals[i, j] = posterior(svs[i], m_dms[j]).
         """
+        # un_fname = "{}{}posterior_sv_{}.csv".format(
+        #     post_sv_dir, "test/" if self.test else "", self.filename_suffix())
+        # sv_col, m_dm_col, un_post_col = np.loadtxt(un_fname).T
+
+        # n_fname = "{}{}normalized_posterior_sv_{}.csv".format(
+        #     post_sv_dir, "test/" if self.test else "", self.filename_suffix())
+        # _, _, post_col = np.loadtxt(n_fname).T
+
+        # self._svs, self._m_dms = np.meshgrid(np.unique(m_dm_col),
+        #                                      np.unique(sv_col))
+        # self._post = 
+
         fname = "{}{}{}posterior_sv_{}.csv".format(
             post_sv_dir, "test/" if self.test else "",
             "normalized_" if normalized else "", self.filename_suffix())

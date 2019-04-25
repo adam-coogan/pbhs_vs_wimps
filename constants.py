@@ -480,3 +480,27 @@ def post_sv_ci(xs, p_xs, alpha=0.95):
     if not sol.converged:
         print("Warning: root_scalar did not converge")
     return 10**sol.root
+
+
+# def plot_gambit_contour_envelope(ax, color=None, padding=10, level=6):
+#     # TODO: Christoph said 3, not 6...
+#     # Construct parameter meshgrid
+#     m_dm_g = np.logspace(1, 4, gambit_grid_cols)[padding:]
+#     sv_g = np.logspace(-35, -23, gambit_grid_rows)[padding:]
+#     m_dm_g_mg, sv_g_mg = np.meshgrid(m_dm_g, sv_g)
+#
+#     # Construct envelope of contours
+#     envelope = np.inf * np.ones(
+#         [gambit_grid_rows - padding, gambit_grid_cols - padding])
+#     for model in gambit_models:
+#         gambit_contour = np.load("{}contours_{}.npy".format(
+#             gambit_dir, model)).T[padding:, padding:]
+#         envelope = np.min([envelope, gambit_contour], axis=0)
+#
+#     ax.contourf(
+#         m_dm_g_mg,
+#         sv_g_mg,
+#         envelope,
+#         levels=[0, level],
+#         alpha=0.3,
+#         colors=[color])
