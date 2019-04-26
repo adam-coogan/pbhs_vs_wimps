@@ -1,0 +1,17 @@
+#Matplotlib Config file
+
+backend       : TKAgg
+
+#Fonts
+
+text.usetex   	: True
+font.family   	: serif
+
+
+#Ticks
+
+xtick.top:	True
+xtick.direction: in
+
+ytick.right: True
+ytick.direction: in
