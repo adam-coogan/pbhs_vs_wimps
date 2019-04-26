@@ -8,6 +8,16 @@ text.usetex   	: True
 font.family   	: serif
 
 
+#Lines
+
+lines.linewidth : 1.0
+
+
+#Hatch
+
+hatch.color : DimGray
+
+
 #Ticks
 
 xtick.top:	True
@@ -15,3 +25,5 @@ xtick.direction: in
 
 ytick.right: True
 ytick.direction: in
+
+axes.axisbelow : False
