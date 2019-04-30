@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 import numpy as np
 from scipy.interpolate import interp1d
-from scipy.integrate import trapz
+from scipy.integrate import trapz, cumtrapz
 
 from constants import post_sv_ci, fs_0
 
@@ -86,7 +86,16 @@ class Distribution_f:
             raise Exception("p(f|m_pbh, n_pbh) table not found. Make sure it "
                             "was computed for this value of n_pbh.")
 
-        self.p_f = interp1d(fs, p_fs, bounds_error=False, fill_value=0.)
+        # Normalization constant
+        norm = trapz(p_fs, fs)
+
+        self.p_f = interp1d(fs, p_fs / norm, bounds_error=False, fill_value=0.)
+        cdf_vals = np.insert(cumtrapz(p_fs / norm, fs), 0, 0.)
+        self.cdf_f = interp1d(
+            fs, cdf_vals, bounds_error=False, fill_value="extrapolate")
+        # Inverse CDF
+        self.inverse_cdf_f = interp1d(
+            cdf_vals, fs, bounds_error=False, fill_value="extrapolate")
 
     def __call__(self, f):
         """Evaluates p(f|m_pbh, n_pbh).
@@ -105,6 +114,16 @@ class Distribution_f:
             self._load_p_f_gw()
         return self.p_f(f)
 
+    def cdf(self, f):
+        if self.cdf_f is None:
+            self._load_p_f_gw()
+        return self.cdf_f(f)
+
+    def sample(self, n):
+        if self.inverse_cdf_f is None:
+            self._load_p_f_gw()
+        return self.inverse_cdf_f(np.random.rand(n))
+
     @property
     def merger_rate_prior(self):
         """str : prior on merger rate."""
@@ -117,6 +136,8 @@ class Distribution_f:
         else:
             self._merger_rate_prior = val
             self.p_f = None
+            self.cdf_f = None
+            self.inverse_cdf_f = None
 
     @property
     def m_pbh(self):
@@ -131,6 +152,8 @@ class Distribution_f:
         else:
             self._m_pbh = val
             self.p_f = None
+            self.cdf_f = None
+            self.inverse_cdf_f = None
 
     @property
     def n_pbh(self):
@@ -141,6 +164,8 @@ class Distribution_f:
     def n_pbh(self, val):
         self._n_pbh = val
         self.p_f = None
+        self.cdf_f = None
+        self.inverse_cdf_f = None
 
 
 class Prior_sv:  # __init__(sv_prior), __call__(sv)
@@ -322,7 +347,7 @@ class Posterior(ABC):
 
         # self._svs, self._m_dms = np.meshgrid(np.unique(m_dm_col),
         #                                      np.unique(sv_col))
-        # self._post = 
+        # self._post =
 
         fname = "{}{}{}posterior_sv_{}.csv".format(
             post_sv_dir, "test/" if self.test else "",
