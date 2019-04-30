@@ -8,7 +8,6 @@ from scipy import special
 from pbhhalosim import PBHHaloSim
 from posterior_inference_shared import f_min, f_max, Posterior
 
-
 """
 Classes for performing posterior analysis with point source constraints.
 """
@@ -145,8 +144,8 @@ class Distribution_N_gamma:
         def p_gamma_err(sv, m_dm):
             return p_gamma_err_rg([sv, m_dm])
 
-        self.p_gamma = p_gamma
-        self.p_gamma_err = p_gamma_err
+        self._p_gamma = p_gamma
+        self._p_gamma_err = p_gamma_err
 
     def __call__(self, n_gamma, sv, f, m_dm):
         """Evaluates the PDF.
@@ -167,10 +166,20 @@ class Distribution_N_gamma:
         np.array
             p(n_gamma|m_pbh, f, m_dm, sv)
         """
-        if self.p_gamma is None:
+        if self._p_gamma is None:
             self._load_p_gamma_table()
         return binom.pmf(n_gamma, n=np.floor(n_mw_pbhs(f, self.m_pbh)),
                          p=self.p_gamma(sv, m_dm))
+
+    def p_gamma(self, sv, m_dm):
+        if self._p_gamma is None:
+            self._load_p_gamma_table()
+        return self._p_gamma(sv, m_dm)
+
+    def p_gamma_err(self, sv, m_dm):
+        if self._p_gamma_err is None:
+            self._load_p_gamma_table()
+        return self._p_gamma_err(sv, m_dm)
 
     @property
     def m_pbh(self):
@@ -180,8 +189,8 @@ class Distribution_N_gamma:
     def m_pbh(self, val):
         self._m_pbh = val
         # Dump the current tables
-        self.p_gamma = None
-        self.p_gamma_err = None
+        self._p_gamma = None
+        self._p_gamma_err = None
 
 
 class Distribution_U:
@@ -428,6 +437,12 @@ class PointSourcePosterior(Posterior):
     def p_n_gamma(self, n_gamma, sv, f, m_dm):
         """Computes p(n_gamma|m_pbh, f, m_dm, sv)."""
         return self._p_n_gamma(n_gamma, sv, f, m_dm)
+
+    def p_gamma(self, sv, m_dm):
+        """Returns the probability p_gamma that an individual PBH is
+        detectable.
+        """
+        return self._p_n_gamma.p_gamma(sv, m_dm)
 
     def p_u(self, n_gamma):
         """Computes p(n_u|n_gamma)."""
