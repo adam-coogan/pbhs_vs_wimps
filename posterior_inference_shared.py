@@ -119,6 +119,11 @@ class Distribution_f:
             self._load_p_f_gw()
         return self.cdf_f(f)
 
+    def inverse_cdf(self, f):
+        if self.inverse_cdf_f is None:
+            self._load_p_f_gw()
+        return self.inverse_cdf_f(f)
+
     def sample(self, n):
         if self.inverse_cdf_f is None:
             self._load_p_f_gw()
