@@ -148,7 +148,7 @@ class Distribution_N_gamma:
         self._p_gamma_err = p_gamma_err
 
     def __call__(self, n_gamma, sv, f, m_dm):
-        """Evaluates the PDF.
+        """Evaluates the PMF.
 
         Parameters
         ----------
@@ -170,6 +170,16 @@ class Distribution_N_gamma:
             self._load_p_gamma_table()
         return binom.pmf(n_gamma, n=np.floor(n_mw_pbhs(f, self.m_pbh)),
                          p=self.p_gamma(sv, m_dm))
+
+    # def cdf(self, n_gamma, sv, f, m_dm):
+    #     if self._p_gamma is None:
+    #         self._load_p_gamma_table()
+    #     print(n_gamma, int(np.floor(n_mw_pbhs(f, self.m_pbh))),
+    #           self.p_gamma(sv, m_dm))
+    #     return binom.pmf(
+    #         np.arange(0, n_gamma + 1),
+    #         n=int(np.floor(n_mw_pbhs(f, self.m_pbh))),
+    #         p=self.p_gamma(sv, m_dm)).sum()
 
     def p_gamma(self, sv, m_dm):
         if self._p_gamma is None:
