@@ -2,14 +2,22 @@ from argparse import ArgumentParser
 from matplotlib import pyplot as plt
 import numpy as np
 
-from constants import colors
-from diffuse_analysis import diffuse_limit
-from point_source_analysis import point_source_limit
-from distributions import Distribution_f
+from src.constants import colors
+from src.diffuse_analysis import diffuse_limit
+from src.distributions import Distribution_f
+from src.point_source_analysis import point_source_limit
 
 """
-Set limits on diffuse and point-source emission from PBHs in a frequentist
-manner.
+Generates DM self-annihilation cross section limit plots using point-source and
+diffuse gamma-ray observations.
+
+To regenerate figure 2, run:
+
+>>> python plot_frequentist_limits.py -plot_limits
+
+To regenerate figure 3, run:
+
+>>> python plot_frequentist_limits.py -plot_ps_diff
 """
 
 # Directory containing GAMBIT contours
