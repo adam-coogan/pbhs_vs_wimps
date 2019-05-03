@@ -1,3 +1,12 @@
+""" plot_PBHfraction.py
+
+To run this script and reproduce Fig. 1, run:
+
+python plot_PBHfraction.py
+
+
+"""
+
 import numpy as np
 import matplotlib.pylab as plt
 
@@ -6,6 +15,27 @@ from scipy.integrate import cumtrapz, quad
 from scipy.interpolate import interp1d, UnivariateSpline
 
 
+#Parameters for the three detection scenarios
+mstrings = {
+    "O3": "0.5",
+    "ET": "10.0",
+    "SKA": "100.0"
+}
+
+Nlists = {
+    "O3": np.array([1, 2, 3, 4, 5, 10, 30, 80]),
+    "ET": np.array([1, 2, 3, 4, 5, 10, 1000, 10000, 20000, 24000]),
+    "SKA": np.array([1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100])
+}
+
+lims = {
+    "O3": 0.1128, #Figure 3 of https://arxiv.org/pdf/1808.04771.pdf
+    "ET": 4.13e-03, #Figure 11 of https://arxiv.org/pdf/1805.09034.pdf
+    "SKA": 3.2e-4 #2 sigma radio from https://arxiv.org/pdf/1812.07967.pdf
+}
+
+
+#Calculate credible intervals
 def calcCredible(x, y):
     cum_dist =  cumtrapz(y, x, initial=0) 
     inv_cum = interp1d(cum_dist/cum_dist[-1], x)
@@ -18,7 +48,8 @@ def calcCredible(x, y):
 def round_to(x, nearest=10):
     return int(round(x / nearest) * nearest)
 
-
+#Get a polygon which shows the credible intervals
+#cut off at YMAX
 def getPolygon(X, Y1, Y2, YMAX):
     if (Y1[-1] < YMAX):
         Y1 = np.append(Y1, YMAX*1.001)
@@ -39,6 +70,7 @@ def getPolygon(X, Y1, Y2, YMAX):
     Y_B_LIST = np.append(Y2[X < X_B], YMAX)
     return np.append(X_A_LIST, X_B_LIST[::-1]), np.append(Y_A_LIST, Y_B_LIST[::-1])
     
+#Calculate cut-off in credible intervals
 def getCutOff(X, Y, YMAX):
     interp_inv = interp1d(np.log10(Y), np.log10(X))
     X_new = 10**interp_inv(np.log10(YMAX))
@@ -48,6 +80,7 @@ def getCutOff(X, Y, YMAX):
     Y_out = np.append(Y_out, YMAX)
     return X_out, Y_out
     
+#Get credible intervals as a function of number of observations
 def get_f_intervals(f_list, P_list):
     N = len(P_list)
     f_med = np.zeros(N)
@@ -59,24 +92,8 @@ def get_f_intervals(f_list, P_list):
 
     return f_min, f_med, f_max
 
-mstrings = {
-    "O3": "0.5",
-    "ET": "10.0",
-    "SKA": "100.0"
-}
 
-Nlists = {
-    "O3": np.array([1, 2, 3, 4, 5, 10, 30, 81]),
-    "ET": np.array([1, 2, 3, 4, 5, 10, 1000, 10000, 20000, 24000]),
-    "SKA": np.array([1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100])
-}
-
-lims = {
-    "O3": 0.1128, #Figure 3 of https://arxiv.org/pdf/1808.04771.pdf
-    "ET": 4.13e-03, #Figure 11 of https://arxiv.org/pdf/1805.09034.pdf
-    "SKA": 3.2e-4 #2 sigma radio from https://arxiv.org/pdf/1812.07967.pdf
-}
-
+#Add a posterior to the plot
 def addToPlot(exp, prior, color, cut=True):
     Nlist = Nlists[exp]
     Mstr = mstrings[exp]
@@ -108,11 +125,11 @@ def addToPlot(exp, prior, color, cut=True):
     return N_new[-1]
     
 
+#---------------------------------
+
 plt.figure(figsize=(3.5,3))
 
 ax = plt.gca()
-
-
 
 N1 = addToPlot("O3", "J", color='C0')
 plt.plot([N1*0.4, N1*2.1],[1.02*lims["O3"],1.02*lims["O3"]],linestyle='-', color='dimgray', lw=0.8, zorder=2.0)
