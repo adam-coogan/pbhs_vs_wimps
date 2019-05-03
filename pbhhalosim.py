@@ -1,24 +1,16 @@
 import numbers
 import numpy as np
 from scipy.special import gammainc
-from scipy.optimize import root_scalar
 
 from constants import gamma_tr_sample, GeV_to_erg, pbh_ann_rate
 from constants import r_s_mw, alpha_mw, n_mw_pbhs, d_earth, to_galactic_coords
 from constants import int_dnde_interps, int_e_dnde_interps, kpc_to_cm
-from constants import fs_0, n_u_0, flux_type_0, flux_thresh_0, b_cut_0
-
+from constants import fs_0, flux_type_0, flux_thresh_0, b_cut_0
 
 """
 Class for performing a Monte Carlo simulation of PBHs to assess their
 detectability as point sources. Also includes a function to compute a simple
 version of the resulting constraint on <sigma v>.
-
-To-do
------
-Several of the member variables and functions are written to allow for extended
-mass functions. It would be cleaner to specify to a monochromatic mass
-function.
 """
 
 
@@ -357,19 +349,3 @@ class PBHHaloSim(object):
         self._fluxes()
         self._pr_det()
         self._n_det_expected()
-
-
-@np.vectorize
-def sv_bound_pt(m_dm, m_pbh, f):
-    """Computes a quick-and-dirty bound on <sigma v> by requiring the
-    number of PBHs passing the |b| and Phi cuts to be less than the number
-    of unassociated point sources.
-    """
-    def objective(log10_sv):
-        sim = PBHHaloSim(m_pbh, f, m_dm, 10**log10_sv, n_samples=10000)
-        sim.run()
-        return sim.n_det - n_u_0
-
-    sol = root_scalar(objective, bracket=[-45, -20], maxiter=20)
-    assert sol.converged
-    return 10**sol.root
