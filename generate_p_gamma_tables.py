@@ -1,33 +1,23 @@
 from argparse import ArgumentParser
 import numpy as np
 
-from distributions import Distribution_N_gamma
+from src.distributions import Distribution_N_gamma
 
 
 """
-Creates table containing p_gamma values.
+Creates a table containing p_gamma values.
 
-Notes
------
-* The required directory structure is the following:
-    - data/p_gammas/: for storing p_gamma tables computed by the point source
-      MC.
+To regenerate the tables used for the calculations in the paper, run:
 
-Command line arguments
-----------------------
--m_pbh : float
--n_pbh : int
--o, --overwrite_p_gamma : bool
-    If True, the p_gamma table will be recomputed, overwriting the current file
-    if it exists.
--n_samples : int
--log10_m_dm_min : float
--log10_m_dm_max : float
--n_m_dm : int
--log10_sv_min : float
--log10_sv_max : float
--n_sv : int
--v, --verbose : bool
+>>> python generate_p_gamma_tables.py
+
+To see the command line arguments, run:
+
+>>> python generate_p_gamma_tables.py -h
+
+This script requires the directory `data/p_gammas/` to exist, since this is
+where the tables are saved. If running with the `-test` flag, the directory
+`data/p_gammas/test/` must exist.
 """
 
 
