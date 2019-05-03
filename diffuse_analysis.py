@@ -1,15 +1,15 @@
 import numpy as np
 from scipy.integrate import trapz, quad
-from scipy.optimize import root_scalar
+from scipy.stats import chi2
+
 from constants import kpc_to_cm, exp_tau
 from constants import hubble, dnde_interps, speed_of_light, rho_dm_avg_0
-from constants import e_egb, phi_egb, err_high_egb, r_s_mw, rho_einasto
+from constants import e_egb, err_high_egb, r_s_mw, rho_einasto
 from constants import d_earth, pbh_ann_rate, fs_0
 
 
 """
-Functions for computing diffuse flux from PBHs and a simple version of the
-resulting constraint on <sigma v>.
+Functions for computing diffuse galactic and Extragalactic fluxes from PBHs.
 """
 
 
@@ -114,43 +114,42 @@ def phi_diff(e, m_dm, sv, m_pbh, f, fs=fs_0):
 
 
 @np.vectorize
-def sv_bound_diff(m_dm, m_pbh, f, n_sigma=3, source="ex", fs=fs_0):
-    """Computes a quick-and-dirty bound on <sigma v> by requiring the diffuse
-    flux from PBHs to exceed the measured value by no more than n_sigma
-    standard deviations.
+def diffuse_limit(m_dm,
+                  m_pbh,
+                  n_pbh,
+                  f,
+                  merger_rate_prior="LF",
+                  alpha=0.95):
+    """Computes the diffuse constraint on <sigma v>.
 
     Parameters
     ----------
-    m_dm : float
+    m_dm : float or numpy.array
         DM mass.
     m_pbh : float
         PBH mass.
-    f : float
-        Relative PBH abundance.
-    n_sigma : float
-        Significance required for PBH signal to be considered significant.
-    source : str
-        Which contributions of PBHs to the diffuse flux to consider: "ex" for
-        extragalactic only, "gal" for galactic only or "gal+ex" for both.
-    fs : str
-        DM annihilation final state.
+    n_pbh : int
+        Number of PBH detections by LIGO O3, ET or SKA.
+    merger_rate_prior : str
+        Prior on merger rate (for GW scenarios) or event rate (for SKA).
+    alpha : float
+        Level for upper limit. Must be between 0 and 1.
+    f_percentile : float
+        f will be set to this percentile for the corresponding p(f|n_pbh)
+        distribution. Must be between 0 and 1.
 
     Returns
     -------
-    float
-        Bound on <sigma v>.
+    numpy.array
+        The upper limit on <sigma v> at the alpha level.
     """
-    def objective(log10_sv):
-        sv = 10**log10_sv
-        if source == "ex":
-            phi_dm = phi_ex(e_egb, m_dm, sv, m_pbh, f, fs)
-        elif source == "gal":
-            phi_dm = phi_gal(e_egb, m_dm, sv, m_pbh, f, fs)
-        elif source == "gal+ex":
-            phi_dm = phi_diff(e_egb, m_dm, sv, m_pbh, f, fs)
-        return np.max((phi_dm - phi_egb) / err_high_egb) - n_sigma
+    # Critical value for chi2
+    chi2_crit = chi2.ppf(alpha, len(e_egb))
 
-    sol = root_scalar(
-        objective, bracket=[-50, -10], x0=-26, xtol=1e-200, rtol=1e-8)
-    assert sol.converged
-    return 10**sol.root
+    # Compute chi2 for a reference cross section
+    sv_ref = 3e-26
+    chi2_ref = np.sum(
+        (phi_ex(e_egb, m_dm, sv_ref, m_pbh, f) / err_high_egb)**2)
+
+    # Since chi2 ~ <sigma v>**(2/3) the limit can be computed analytically
+    return sv_ref * (chi2_crit / chi2_ref)**(3 / 2)
