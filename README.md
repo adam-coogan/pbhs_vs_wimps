@@ -1,5 +1,7 @@
 # Constraining weakly interacting massive particles with primordial black holes
 
+[![DOI](https://zenodo.org/badge/169754838.svg)](https://zenodo.org/badge/latestdoi/169754838)
+
 Code authors: Adam Coogan, Daniele Gaggero and Bradley Kavanagh.
 
 ## Reproducing results
