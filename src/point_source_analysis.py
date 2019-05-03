@@ -1,8 +1,8 @@
 import numpy as np
 from scipy.optimize import minimize
 
-from constants import n_u_0
-from distributions import Distribution_N_gamma
+from src.constants import n_u_0
+from src.distributions import Distribution_N_gamma
 
 
 @np.vectorize

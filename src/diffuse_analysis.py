@@ -2,10 +2,10 @@ import numpy as np
 from scipy.integrate import trapz, quad
 from scipy.stats import chi2
 
-from constants import kpc_to_cm, exp_tau
-from constants import hubble, dnde_interps, speed_of_light, rho_dm_avg_0
-from constants import e_egb, err_high_egb, r_s_mw, rho_einasto
-from constants import d_earth, pbh_ann_rate, fs_0
+from src.constants import kpc_to_cm, exp_tau
+from src.constants import hubble, dnde_interps, speed_of_light, rho_dm_avg_0
+from src.constants import e_egb, err_high_egb, r_s_mw, rho_einasto
+from src.constants import d_earth, pbh_ann_rate, fs_0
 
 
 """

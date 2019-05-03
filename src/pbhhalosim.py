@@ -2,10 +2,11 @@ import numbers
 import numpy as np
 from scipy.special import gammainc
 
-from constants import gamma_tr_sample, GeV_to_erg, pbh_ann_rate
-from constants import r_s_mw, alpha_mw, n_mw_pbhs, d_earth, to_galactic_coords
-from constants import int_dnde_interps, int_e_dnde_interps, kpc_to_cm
-from constants import fs_0, flux_type_0, flux_thresh_0, b_cut_0
+from src.constants import gamma_tr_sample, GeV_to_erg, pbh_ann_rate
+from src.constants import (r_s_mw, alpha_mw, n_mw_pbhs, d_earth,
+                           to_galactic_coords)
+from src.constants import int_dnde_interps, int_e_dnde_interps, kpc_to_cm
+from src.constants import fs_0, flux_type_0, flux_thresh_0, b_cut_0
 
 """
 Class for performing a Monte Carlo simulation of PBHs to assess their
