@@ -18,11 +18,10 @@ The figures can be remade with the following commands:
 
     `python plot_frequentist_limits.py -plot_ps_diff`
 
-Computing the point-source limits requires making tables containing `p_gamma`, the probability that an individual PBH is detectable by Fermi-LAT. The tables used for the analysis in the paper are contained in the directory `data/p_gammas/`. These may take a few hours to recompute. They can be regenerated with
+Computing the point-source limits requires making tables containing `p_gamma`, the probability that an individual PBH is detectable by Fermi-LAT. The tables used for the analysis in the paper are contained in the directory [`data/p_gammas/`](data/p_gammas/). These may take a few hours to recompute. They can be regenerated with `python generate_p_gamma_tables.py -test`. With the `-test` flag, the `p_gamma` tables will be written to [`data/p_gammas/test/`](data/p_gammas/test/) instead of overwriting the precomputed tables. The script can also be used to generate `p_gamma` tables over different `(m_dm, sv)` grids.
 
-    `python generate_p_gamma_tables.py -test`
+All limit calculations require tabulated posteriors of `f_pbh`. These are provided in [`data/posteriors_f`](data/posteriors_f/) but they can be recomputed by running the script [`ComputePosteriors.sh`](ComputePosteriors.sh). This script calls a number of scripts in [`src/`](src/) which calculate the posteriors from gravitational wave observations. Run `python src/tabulate_posteriors_O3.py -h` and `python src/tabulate_posteriors_ET.py -h` for more detailed usage of these scripts. Scripts for calculating posteriors from SKA will be added shortly.
 
-With the `-test` flag, the `p_gamma` tables will be written to `data/p_gammas/test/` instead of overwriting the precomputed tables. The script can also be used to generate `p_gamma` tables over different `(m_dm, sv)` grids. 
 
 ## `bayesian` branch
 

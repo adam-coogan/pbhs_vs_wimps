@@ -1,4 +1,4 @@
-# Posterior distribution for f, given N = 1 merger events at LIGO O3. PBH Mass: 0.5 M_sunPrior: jeffreys
+# Posterior distribution for f, given N = 1 merger events at LIGO O3. PBH Mass: 0.5 M_sunPrior: J
 # Columns: f, P(f|N)
 9.999999999999999547e-07 8.416139272344972731e-06
 1.071891319205128528e-06 9.669730117647979165e-06

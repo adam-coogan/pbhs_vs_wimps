@@ -1,4 +1,4 @@
-# Posterior distribution for f, given N = 1 merger events in ET. PBH Mass: 10.0 M_sunPrior: jeffreys
+# Posterior distribution for f, given N = 1 merger events in ET. PBH Mass: 10.0 M_sunPrior: J
 # Columns: f, P(f|N)
 9.999999999999999547e-07 7.246589174428889635e+01
 1.071891319205128528e-06 8.324571817517015404e+01

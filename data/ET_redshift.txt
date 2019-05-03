@@ -1,0 +1,5 @@
+# Total source frame mass 20 M_sun
+# Columns: Redshift, Fraction detectable
+7.678380919212519	0.5
+28.52205602981411	0.1
+95.87373195587614	0
