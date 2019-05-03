@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.interpolate import interp1d, RegularGridInterpolator
 from scipy.integrate import trapz, cumtrapz
-from scipy.stats import rv_continuous, rv_discrete, binom
+from scipy.stats import binom
 
 from constants import (fs_0, flux_type_0, flux_thresh_0, b_cut_0, n_mw_pbhs)
 from pbhhalosim import PBHHaloSim
