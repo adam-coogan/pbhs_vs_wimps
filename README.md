@@ -6,17 +6,9 @@ Code authors: Adam Coogan, Daniele Gaggero and Bradley Kavanagh.
 
 The figures can be remade with the following commands:
 
-* Figure 1:
-
-    `python plot_pbh_fraction.py`
-
-* Figure 2:
-
-    `python plot_frequentist_limits.py -plot_limits`
-
-* Figure 3:
-
-    `python plot_frequentist_limits.py -plot_ps_diff`
+* Figure 1: `python plot_pbh_fraction.py`
+* Figure 2: `python plot_frequentist_limits.py -plot_limits`
+* Figure 3: `python plot_frequentist_limits.py -plot_ps_diff`
 
 Computing the point-source limits requires making tables containing `p_gamma`, the probability that an individual PBH is detectable by Fermi-LAT. The tables used for the analysis in the paper are contained in the directory [`data/p_gammas/`](data/p_gammas/). These may take a few hours to recompute. They can be regenerated with `python generate_p_gamma_tables.py -test`. With the `-test` flag, the `p_gamma` tables will be written to [`data/p_gammas/test/`](data/p_gammas/test/) instead of overwriting the precomputed tables. The script can also be used to generate `p_gamma` tables over different `(m_dm, sv)` grids.
 
