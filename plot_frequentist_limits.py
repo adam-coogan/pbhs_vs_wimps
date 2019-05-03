@@ -27,7 +27,7 @@ gambit_dir = "data/gambit/"
 gambit_models = ["CMSSM", "MSSM7", "NUHM1", "NUHM2"]
 
 
-def plot_gambit_contour_envelope(ax, color=None, padding=10, level=6):
+def plot_gambit_contour_envelope(ax, color=None, padding=10, level=3):
     """Plots envelope of 95% CL profile likelihood contours computed by the
     GAMBIT collaboration for several new physics scenarios. The light grey
     contour indicates the singlet DM model.
@@ -43,42 +43,31 @@ def plot_gambit_contour_envelope(ax, color=None, padding=10, level=6):
         ~10, the plot will contain vertical and horizontal lines around the
         edges.
     level : int
-        Level of the contour. Leave this at 6 for 95% CL contours.
-        TODO: Christoph said level should be 3, not 6...
+        Level of the contour. Leave this at 3 for 95% CL contours.
     """
-    # Grid size
-    n_gambit_grid_rows, n_gambit_grid_cols = 101, 203
-    # Construct parameter meshgrid
-    m_dm_g = np.logspace(1, 4, n_gambit_grid_cols)[padding:]
-    sv_g = np.logspace(-45, -23, n_gambit_grid_rows)[padding:]
-    m_dm_g_mg, sv_g_mg = np.meshgrid(m_dm_g, sv_g)
+    neg_lnL = np.load("{}contours_SingletDM.npy".format(gambit_dir)).T
+
+    # Extract parameter grid
+    m_dms = 10**neg_lnL[0, 1:]
+    svs = 10**neg_lnL[1:, 0]
+    m_dm_mg, sv_mg = np.meshgrid(m_dms, svs)
 
     # Add the singlet contour separately
-    singlet_contour = np.load(
-        "{}contours_SingletDM.npy".format(gambit_dir)).T[padding:, padding:]
-    ax.contourf(
-        m_dm_g_mg,
-        sv_g_mg,
-        singlet_contour,
-        levels=[0, level],
-        alpha=0.2,
-        colors=[color])
+    ax.contourf(m_dm_mg, sv_mg, neg_lnL[1:, 1:], levels=[-np.inf, level],
+                alpha=0.2, colors=[color])
 
     # Construct envelope of other contours
-    envelope = np.inf * np.ones(
-        [n_gambit_grid_rows - padding, n_gambit_grid_cols - padding])
+    # Construct envelope of other contours
+    envelope = np.inf * np.ones(neg_lnL[1:, 1:].shape)
     for model in gambit_models:
-        gambit_contour = np.load("{}contours_{}.npy".format(
-            gambit_dir, model)).T[padding:, padding:]
-        envelope = np.min([envelope, gambit_contour], axis=0)
+        neg_lnL = np.load("{}contours_{}.npy".format(
+            gambit_dir, model)).T
+        assert np.all(m_dms == 10**neg_lnL[0, 1:]), "m_dm grid mismatch"
+        assert np.all(svs == 10**neg_lnL[1:, 0]), "sv grid mismatch"
+        envelope = np.min([envelope, neg_lnL[1:, 1:]], axis=0)
 
-    ax.contourf(
-        m_dm_g_mg,
-        sv_g_mg,
-        envelope,
-        levels=[0, level],
-        alpha=0.35,
-        colors=[color])
+    ax.contourf(m_dm_mg, sv_mg, envelope, levels=[-np.inf, level],
+                alpha=0.35, colors=[color])
 
 
 def plot_ps_diff(m_pbhs, n_pbhs, m_dms, fs, rate_priors,
@@ -125,7 +114,7 @@ def plot_ps_diff(m_pbhs, n_pbhs, m_dms, fs, rate_priors,
             # Unitarity bound
             ax.loglog(m_dms, (m_dms / 1e3)**6 * 7e-41, '--k', alpha=0.6,
                       linewidth=0.75)
-            ax.text(6e3, 1.7e-35, "Unitarity", fontsize=6, rotation=34,
+            ax.text(4e3, 2e-36, "Unitarity", fontsize=6, rotation=34.5,
                     alpha=0.6, horizontalalignment="center",
                     verticalalignment="center")
 
