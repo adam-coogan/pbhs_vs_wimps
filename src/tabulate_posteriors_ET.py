@@ -166,7 +166,7 @@ print("95% Upper limit on f:", f_lower)
 mstr = str(round(M_PBH, 1))
 Nstr = str(N_obs)
 
-htxt = "Posterior distribution for f, given N = " + Nstr + " merger events in ET. PBH Mass: " + mstr + " M_sun"
+htxt = "Posterior distribution for f, given N = " + Nstr + " merger events in ET. PBH Mass: " + mstr + " M_sun. "
 htxt += "Prior: " + prior_type
 htxt += "\nColumns: f, P(f|N)"
 
