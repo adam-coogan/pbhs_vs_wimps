@@ -1,8 +1,18 @@
-# Code for "Primordial black holes as silver bullets for new physics at the weak scale"
+# Constraining weakly interacting massive particles with primordial black holes
 
-## Reproducing plots
+## Reproducing results
 
-Short description of which scripts to run to regenerate each plot.
+The figures can be remade with the following commands:
+* Figure 1:
+    `python plot_pbh_fraction.py`
+* Figure 2:
+    `python plot_frequentist_limits.py -plot_limits`
+* Figure 3:
+    `python plot_frequentist_limits.py -plot_ps_diff`
+
+Computing the point-source limits requires making tables containing `p_gamma`, the probability that an individual PBH is detectable by ermi-LAT. The tables used for the analysis in the paper are contained in the directory `data/p_gammas/`. These may take a few hours to recompute. They can be regenerated with
+    `python generate_p_gamma_tables.py -test`
+With the `-test` flag, the `p_gamma` tables will be written to `data/p_gammas/test/` instead of overwriting the precomputed tables. The script can also be used to generate `p_gamma` tables over different `(m_dm, sv)` grids. 
 
 ## `bayesian` branch
 The Bayesian branch contains code for performing a Bayesian analysis of the cross section limits.
