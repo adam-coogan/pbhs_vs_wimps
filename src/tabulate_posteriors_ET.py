@@ -25,7 +25,7 @@ import MergerRate as MR
 import argparse
 
 #Parse the arguments!   
-parser = argparse.ArgumentParser(description='...')
+parser = argparse.ArgumentParser(description='Calculate and tabulate posteriors on f_PBH given N_obs detections with Einstein telescope. Outputs a .txt file to the ../data/posteriors_f folder.')
 #parser.add_argument('-M_PBH','--M_PBH', help='PBH mass in solar masses', type=float, default=10.0)
 parser.add_argument('-N_obs','--N_obs', help='Number of observed mergers', type=int, default=1)
 parser.add_argument('-prior','--prior', help="Merger rate prior, either 'J' for Jeffrey's prior or 'LF' for log-flat prior", type=str, default="J")
