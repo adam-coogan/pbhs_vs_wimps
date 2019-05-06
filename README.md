@@ -2,6 +2,8 @@
 
 [![DOI](https://zenodo.org/badge/169754838.svg)](https://zenodo.org/badge/latestdoi/169754838)
 
+Read the paper: [arXiv:1905.01238](https://arxiv.org/abs/1905.01238).
+
 Code authors: Adam Coogan, Daniele Gaggero and Bradley Kavanagh.
 
 ## Reproducing results
