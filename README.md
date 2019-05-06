@@ -1,6 +1,6 @@
 # Constraining weakly interacting massive particles with primordial black holes
 
-[![DOI](https://zenodo.org/badge/169754838.svg)](https://zenodo.org/badge/latestdoi/169754838)
+[![DOI](https://zenodo.org/badge/169754838.svg)](https://zenodo.org/badge/latestdoi/169754838) [![arXiv](https://img.shields.io/badge/arXiv-1905.01238-B31B1B.svg)](https://arxiv.org/abs/1905.01238)
 
 Read the paper: [arXiv:1905.01238](https://arxiv.org/abs/1905.01238).
 
